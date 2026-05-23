@@ -12,9 +12,10 @@
 ## Tech Stack
 
 - **Python 3.14** (akshare, baostock, pandas, requests, schedule, lightgbm, hmmlearn)
+- **TypeScript / Remotion 4.0** (程序化视频渲染)
 - **SQLite** (本地缓存股票数据)
 - **Telegram Bot** / Server酱 / 企业微信 (消息推送)
-- **部署**: 阿里云 Ubuntu + crontab 定时任务
+- **部署**: 阿里云 Ubuntu + crontab 定时任务; Vultr Ubuntu + systemd
 
 ## Modules — midline_strategy/
 
@@ -48,6 +49,28 @@
 | `data_fetcher.py` | 多源数据获取 |
 | `push_notifier.py` | 多渠道推送 |
 | `config.py` | 系统配置 |
+
+## Modules — youtube-studio/
+
+| 模块 | 说明 |
+|------|------|
+| `pipeline.py` | 统一 CLI 入口：`shorts` / `video` / `script` / `thumbnail` / `remotion` / `upload` |
+| `config.py` | 统一配置（所有环境变量在此加载） |
+| `script_gen.py` | Claude API 脚本生成（带 fallback 示例脚本） |
+| `thumbnail_gen.py` | AI 缩略图生成（runcomfy + PIL fallback） |
+| `n8n_trigger.py` | n8n 工作流 Webhook 触发 |
+| `youtube_api.py` | YouTube Data API v3 上传（OAuth） |
+| `shorts_generator/` | 开源 Shorts Generator 集成，支持 API (MuAPI) 和 Local 模式 |
+| `src/` | Remotion TypeScript 组件（Title/Bullet/Text/Outro 场景） |
+| `package.json` | Remotion 项目配置，`npm run build` 渲染视频 |
+
+## Key Architecture — youtube-studio
+
+- **Unified CLI**: `python pipeline.py <command>` — 所有操作通过子命令调用
+- **Shorts Generator**: `python pipeline.py shorts <youtube_url>` — MuAPI API 或本机 (yt-dlp+faster-whisper+ffmpeg)
+- **Full Video Pipeline**: `python pipeline.py video <topic>` — 脚本→缩略图→n8n→上传数据
+- **Remotion Rendering**: `python pipeline.py remotion` — 渲染 React 组件为 MP4
+- **YouTube Upload**: `python pipeline.py upload <video>` — OAuth 认证后上传
 
 ## Key Architecture — midline_strategy
 
@@ -92,7 +115,7 @@ Risk: 单股 ≤ 10%，止损 -7%，止盈 10%，时间止损 15 自然日
 | 服务器 | IP | 用途 |
 |--------|----|------|
 | 阿里云 | 47.113.118.5 (root) | 选股程序运行路径 `/root/midline_strategy/` |
-| Vultr | 45.77.96.229 (root) | Telegram 代理隧道 + YouTube Studio 项目 |
+| Vultr | 45.77.96.229 (root) | Telegram 代理隧道 + YouTube Studio 项目 (路径 `/root/first-CC/youtube-studio/`) |
 
 阿里云内网: 172.18.240.161, WireGuard: 10.66.66.1/24
 Crontab: 10 15/30 15 * 1-5
@@ -112,10 +135,16 @@ python train.py                             # 训练 LightGBM 模型
 
 # youtube-studio 子系统
 cd youtube-studio
-python pipeline.py "视频主题"                # 运行完整视频制作流水线
-python pipeline.py "AI 工具" --style 教程 --duration 8  # 指定风格和时长
-python script_gen.py                        # 单独生成脚本
-python thumbnail_gen.py                     # 单独生成缩略图
+python pipeline.py shorts "https://youtube.com/..."     # 从视频提取 Shorts
+python pipeline.py shorts "URL" --mode local --clips 5  # 本机模式生成 5 个
+python pipeline.py video "AI 视频制作"                    # 完整视频流水线
+python pipeline.py script "主题"                         # 仅生成脚本
+python pipeline.py thumbnail "主题"                      # 仅生成缩略图
+python pipeline.py remotion --crf 18                     # 渲染 Remotion 视频
+python pipeline.py upload "video.mp4" --title "标题"     # 上传到 YouTube
+python script_gen.py                                     # 单独生成脚本（调试用）
+python thumbnail_gen.py                                  # 单独生成缩略图（调试用）
+npm install && npm run build                             # 安装并渲染 Remotion
 ```
 
 ## Memory System

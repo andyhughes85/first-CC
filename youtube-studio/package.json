@@ -1,0 +1,23 @@
+{
+  "name": "youtube-video-maker",
+  "version": "1.0.0",
+  "description": "AI-powered video creation with Claude + Remotion",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render MainVideo out/output.mp4 --crf=18",
+    "build:high": "remotion render MainVideo out/output.mp4 --crf=16",
+    "build:frames": "remotion still MainVideo out/still.png --frame=10",
+    "preview": "remotion preview MainVideo"
+  },
+  "dependencies": {
+    "@remotion/media": "4.0.464",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.243"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.243",
+    "@types/react": "^18.3.0",
+    "typescript": "^5.5.0"
+  }
+}

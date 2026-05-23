@@ -3,6 +3,7 @@
 import json
 import os
 import time
+import socket
 import logging
 import sqlite3
 from datetime import datetime
@@ -10,6 +11,8 @@ from datetime import datetime
 import pandas as pd
 
 from config import DB_PATH
+
+socket.setdefaulttimeout(30)  # 防止 baostock API 挂死
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -79,6 +82,13 @@ def _fetch_one_stock(bs_session, code, start, end):
                 start_date=start, end_date=end, frequency="d", adjustflag="2",
             )
             if rs.error_code != "0":
+                # 会话过期: 重新登录后重试
+                if "未登录" in (rs.error_msg or ""):
+                    log.info("  ⚡ 会话过期，重新登录...")
+                    bs_session.logout()
+                    bs_session.login()
+                    time.sleep(1)
+                    continue  # 不消耗重试次数
                 if attempt < RETRY_TIMES:
                     time.sleep(2)
                     continue

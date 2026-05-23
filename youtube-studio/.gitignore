@@ -1,0 +1,21 @@
+# Node
+node_modules/
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Output
+output/
+out/
+
+# YouTube OAuth token
+youtube_token.json
+
+# OS
+.DS_Store
+Thumbs.db
