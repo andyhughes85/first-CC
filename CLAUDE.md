@@ -4,9 +4,10 @@
 
 每日选股推送 — A股中线波段选股系统，全市场扫描 + 技术指标筛选 + Telegram推送。
 
-仓库包含两个子系统：
+仓库包含三个子系统：
 - **`midline_strategy/`** — 主力中线波段策略（定时运行中）
 - **`quant_system/`** — 量化系统 v2（HMM + LightGBM + CVaR 风控，实验性）
+- **`youtube-studio/`** — YouTube 频道自动化（脚本生成 + AI 缩略图 + n8n 工作流 + 上传）
 
 ## Tech Stack
 
@@ -90,8 +91,8 @@ Risk: 单股 ≤ 10%，止损 -7%，止盈 10%，时间止损 15 自然日
 
 | 服务器 | IP | 用途 |
 |--------|----|------|
-| 阿里云 | 47.113.118.5 (root) | 主力：选股程序运行路径 `/root/midline_strategy/` |
-| Vultr | 45.77.96.229 (root) | 代理推送 Telegram（美国服务器，无墙限制） |
+| 阿里云 | 47.113.118.5 (root) | 选股程序运行路径 `/root/midline_strategy/` |
+| Vultr | 45.77.96.229 (root) | Telegram 代理隧道 + YouTube Studio 项目 |
 
 阿里云内网: 172.18.240.161, WireGuard: 10.66.66.1/24
 Crontab: 10 15/30 15 * 1-5
@@ -108,6 +109,13 @@ python -c "from data_fetcher import refresh_trading_pool; refresh_trading_pool()
 cd quant_system
 python pipeline.py                          # 运行完整流水线
 python train.py                             # 训练 LightGBM 模型
+
+# youtube-studio 子系统
+cd youtube-studio
+python pipeline.py "视频主题"                # 运行完整视频制作流水线
+python pipeline.py "AI 工具" --style 教程 --duration 8  # 指定风格和时长
+python script_gen.py                        # 单独生成脚本
+python thumbnail_gen.py                     # 单独生成缩略图
 ```
 
 ## Memory System
