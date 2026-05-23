@@ -82,6 +82,12 @@ def cmd_db():
     conn.close()
 
 
+def cmd_run_once():
+    """立即执行一次选股（不等待定时器）"""
+    from pipeline import daily_job
+    daily_job()
+
+
 def parse_intent(text):
     """自然语言 -> (回复前缀, [命令列表])"""
     t = text.strip()
@@ -91,8 +97,8 @@ def parse_intent(text):
                 "发送「帮助」查看我能做什么。", [])
 
     if any(kw in t for kw in ["跑选股", "运行", "选股", "开跑", "跑一下", "pipeline", "跑策略"]):
-        return "正在跑选股...", [
-            f"cd {BASE_DIR} && python pipeline.py"
+        return "正在跑选股...（需要 1-2 分钟）", [
+            f"cd {BASE_DIR} && timeout 120 python -c \"from bot import cmd_run_once; cmd_run_once()\""
         ]
 
     if any(kw in t for kw in ["日志", "log", "看看", "最近", "运行情况"]):
@@ -199,7 +205,7 @@ def handle_updates():
                     })
                     outputs = []
                     for cmd in commands:
-                        timeout = 120 if "backtest" in cmd else 60
+                        timeout = 180 if "pipeline" in cmd else 120 if "backtest" in cmd else 60
                         out = run(cmd, timeout=timeout)
                         outputs.append(out)
                     result = "\n\n".join(outputs)
