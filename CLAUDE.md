@@ -27,6 +27,7 @@
 | `config.py` | 策略参数配置 |
 | `utils.py` | 工具函数（交易日判断等） |
 | `backtest.py` | 回测引擎，逐日模拟，2018~2025 历史区间 |
+| `bot.py` | Telegram 机器人 — 接收中文指令，执行选股操作 |
 
 ## Modules — quant_system/
 
@@ -64,7 +65,21 @@
 
 Risk: 单股 ≤ 10%，止损 -7%，止盈 10%，时间止损 15 自然日
 
-## Telegram Config (config.py)
+## Telegram Bot (bot.py) — 手机自然语言控制
+
+运行在服务器上的 systemd 服务 `stock-bot.service`，开机自启，断线自动重连。
+
+**支持的指令：**
+- **跑选股** — 立即运行选股策略
+- **看日志** — 查看最近运行日志
+- **更新代码** — 从 GitHub 拉取最新代码
+- **市场状态** — 查看当前大盘状态
+- **定时任务** — 查看 crontab 设置
+- **回测** — 运行回测
+- **数据库** — 查看数据库概况
+- **帮助** — 显示可用指令
+
+**Telegram Config (config.py)**
 
 - Token: `8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s`
 - Chat ID: `-5277218158`
