@@ -98,7 +98,8 @@ def parse_intent(text):
 
     if any(kw in t for kw in ["跑选股", "运行", "选股", "开跑", "跑一下", "pipeline", "跑策略"]):
         return "正在跑选股...（需要 1-2 分钟）", [
-            f"cd {BASE_DIR} && timeout 120 python -c \"from bot import cmd_run_once; cmd_run_once()\""
+            f"cd {BASE_DIR} && timeout 120 python -c \"from bot import cmd_run_once; cmd_run_once()\"",
+            f"tail -20 {BASE_DIR}/trading_bot.log 2>/dev/null || echo '(日志文件不存在)'"
         ]
 
     if any(kw in t for kw in ["日志", "log", "看看", "最近", "运行情况"]):
