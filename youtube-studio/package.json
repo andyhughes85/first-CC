@@ -10,13 +10,13 @@
     "preview": "remotion preview MainVideo"
   },
   "dependencies": {
-    "@remotion/media": "4.0.464",
+    "@remotion/media": "4.0.465",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remotion": "^4.0.243"
+    "remotion": "4.0.465"
   },
   "devDependencies": {
-    "@remotion/cli": "^4.0.243",
+    "@remotion/cli": "4.0.465",
     "@types/react": "^18.3.0",
     "typescript": "^5.5.0"
   }
