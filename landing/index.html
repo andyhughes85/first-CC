@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>每日选股推送 — A股中线波段量化选股</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #1a1a2e;
+            background: #f8f9fc;
+            line-height: 1.7;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #0f0c29, #1a1a4e, #24243e);
+            color: #fff;
+            padding: 100px 0 80px;
+            text-align: center;
+        }
+        .hero h1 { font-size: 3rem; font-weight: 700; letter-spacing: -0.02em; }
+        .hero h1 span { color: #60a5fa; }
+        .hero p {
+            font-size: 1.2rem;
+            color: #a5b4fc;
+            margin-top: 16px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .hero .badge {
+            display: inline-block;
+            background: rgba(96, 165, 250, 0.2);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #93c5fd;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 24px;
+        }
+
+        /* Sections */
+        section { padding: 72px 0; }
+        section h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        section h2::after {
+            content: "";
+            display: block;
+            width: 48px;
+            height: 3px;
+            background: #60a5fa;
+            margin: 12px auto 0;
+            border-radius: 2px;
+        }
+
+        /* Features */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 32px;
+        }
+        .feature-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 36px 28px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.1);
+        }
+        .feature-card .icon {
+            font-size: 2rem;
+            margin-bottom: 16px;
+        }
+        .feature-card h3 { font-size: 1.2rem; margin-bottom: 8px; }
+        .feature-card p { color: #64748b; font-size: 0.95rem; }
+
+        /* How it works */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 24px;
+            counter-reset: step;
+        }
+        .step {
+            background: #fff;
+            border-radius: 16px;
+            padding: 32px 24px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            position: relative;
+            text-align: center;
+        }
+        .step .num {
+            width: 40px; height: 40px;
+            background: #1a1a4e;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 16px;
+        }
+        .step h3 { font-size: 1.1rem; margin-bottom: 8px; }
+        .step p { color: #64748b; font-size: 0.9rem; }
+
+        /* Signals Preview */
+        .signal-preview {
+            background: #fff;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            max-width: 600px;
+            margin: 0 auto;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .signal-preview .header {
+            color: #1a1a2e;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .signal-preview .state { color: #6366f1; }
+        .signal-preview .industry { color: #0891b2; }
+        .signal-preview .stock { color: #059669; }
+        .signal-preview .meta { color: #94a3b8; }
+        .signal-preview .divider { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+
+        /* Specs table */
+        .specs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        .spec-item {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .spec-item .label { color: #64748b; font-size: 0.9rem; }
+        .spec-item .value { font-weight: 600; color: #1a1a2e; }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        /* Telegram Preview */
+        .tg-preview {
+            max-width: 360px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .tg-preview .bar {
+            background: #1a1a4e;
+            color: #fff;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .tg-preview .msg {
+            padding: 16px;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 640px) {
+            .hero h1 { font-size: 2rem; }
+            .hero { padding: 60px 0 48px; }
+            section { padding: 48px 0; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="container">
+        <div class="badge">⚡ 每日盘后自动推送</div>
+        <h1>每日<span>选股</span>推送</h1>
+        <p>A股中线波段量化选股系统 — 全市场扫描 &middot; 技术指标筛选 &middot; Telegram 直达</p>
+    </div>
+</section>
+
+<!-- Features -->
+<section>
+    <div class="container">
+        <h2>核心能力</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon">📊</div>
+                <h3>全市场扫描</h3>
+                <p>每日盘后覆盖 A 股全市场约 5000 只标的，多数据源降级保障数据稳定。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🎯</div>
+                <h3>中线波段策略</h3>
+                <p>均线多头排列 + 放量确认 + 偏离度控制，过滤震荡杂波，捕捉趋势启动。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🤖</div>
+                <h3>Telegram 推送</h3>
+                <p>每日日报 + 实时信号直达手机，支持中文指令交互，随时随地掌控盘面。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🛡️</div>
+                <h3>风控规则</h3>
+                <p>市场状态判断（牛/震荡/熊）动态调整仓位，单股 ≤10%，硬止损 -7%。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🧠</div>
+                <h3>量化模型</h3>
+                <p>HMM 市场状态识别 + LightGBM 评分模型 + CVaR 风险控制，多因子综合打分。</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">📈</div>
+                <h3>历史回测</h3>
+                <p>2018-2025 跨周期回测引擎，逐日模拟交易，验证策略有效性。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How it Works -->
+<section style="background: #fff;">
+    <div class="container">
+        <h2>工作流程</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="num">1</div>
+                <h3>数据获取</h3>
+                <p>全市场行情 + 指数数据多源获取，自动降级容错</p>
+            </div>
+            <div class="step">
+                <div class="num">2</div>
+                <h3>市场研判</h3>
+                <p>均线排列 + ATR 波动率判断市场状态，确定仓位上限</p>
+            </div>
+            <div class="step">
+                <div class="num">3</div>
+                <h3>行业筛选</h3>
+                <p>动量排序优选 TOP5 强势行业，集中火力</p>
+            </div>
+            <div class="step">
+                <div class="num">4</div>
+                <h3>信号生成</h3>
+                <p>均线多头 + 放量 + 偏离度三维筛选，向量化计算</p>
+            </div>
+            <div class="step">
+                <div class="num">5</div>
+                <h3>推送触达</h3>
+                <p>每日 15:35 / 18:00 自动推送日报到 Telegram</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Signal Conditions -->
+<section>
+    <div class="container">
+        <h2>选股条件</h2>
+        <div class="specs">
+            <div class="spec-item"><span class="label">均线多头</span><span class="value">MA5 &gt; MA10 &gt; MA20 &gt; MA60</span></div>
+            <div class="spec-item"><span class="label">放量区间</span><span class="value">量比 1.5 ~ 4.0</span></div>
+            <div class="spec-item"><span class="label">偏离控制</span><span class="value">偏离 20 日线 &lt; 8%</span></div>
+            <div class="spec-item"><span class="label">熊市加强</span><span class="value">量比 &gt; 2.5</span></div>
+            <div class="spec-item"><span class="label">单股仓位</span><span class="value">≤ 10%</span></div>
+            <div class="spec-item"><span class="label">止损线</span><span class="value">-7%</span></div>
+            <div class="spec-item"><span class="label">止盈线</span><span class="value">+10%</span></div>
+            <div class="spec-item"><span class="label">时间止损</span><span class="value">15 自然日</span></div>
+        </div>
+    </div>
+</section>
+
+<!-- Telegram Preview -->
+<section style="background: #fff;">
+    <div class="container">
+        <h2>推送示例</h2>
+        <div class="tg-preview">
+            <div class="bar">📊 中线波段日报 2026-05-23</div>
+            <div class="msg">
+                <span style="color:#6366f1;">【市场】bear | 仓位≤20%</span><br>
+                沪深300: 4845.10 (+1.30%) | 放量 | 高波<br>
+                趋势: MA20↑MA60, 波动率分位81%<br>
+                <br>
+                <span style="color:#0891b2;">【行业TOP5】</span><br>
+                电子 医药生物 电力设备 食品饮料 汽车<br>
+                <br>
+                <span style="color:#059669;">【信号】触发 *3* 只</span><br>
+                &gt; 基础池5000 → 均线过滤28 → 量能过滤3<br>
+                <br>
+                <span style="color:#94a3b8;">【风控】</span><br>
+                单股≤10% | 止损-7% | 连空0天<br>
+                仅供参考，不构成投资建议。
+            </div>
+        </div>
+        <p style="text-align:center; color:#94a3b8; margin-top: 24px; font-size:0.85rem;">
+            Telegram Bot: <strong>@wmxuangu_bot</strong> &nbsp;·&nbsp; 支持中文指令交互
+        </p>
+    </div>
+</section>
+
+<!-- Tech Stack -->
+<section>
+    <div class="container">
+        <h2>技术栈</h2>
+        <div class="specs">
+            <div class="spec-item"><span class="label">语言</span><span class="value">Python 3.14</span></div>
+            <div class="spec-item"><span class="label">数据源</span><span class="value">AkShare / Baostock</span></div>
+            <div class="spec-item"><span class="label">存储</span><span class="value">SQLite</span></div>
+            <div class="spec-item"><span class="label">推送</span><span class="value">Telegram Bot API</span></div>
+            <div class="spec-item"><span class="label">部署</span><span class="value">阿里云 Ubuntu</span></div>
+            <div class="spec-item"><span class="label">定时</span><span class="value">Crontab + systemd</span></div>
+            <div class="spec-item"><span class="label">模型</span><span class="value">LightGBM / HMM</span></div>
+            <div class="spec-item"><span class="label">风控</span><span class="value">CVaR 风险模型</span></div>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <div class="container">
+        每日选股推送 &copy; 2026 &nbsp;·&nbsp; 仅供参考，不构成投资建议
+    </div>
+</footer>
+
+</body>
+</html>
