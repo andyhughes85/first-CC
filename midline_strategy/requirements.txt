@@ -1,0 +1,6 @@
+akshare>=1.13.0
+pandas
+numpy
+schedule
+requests
+baostock

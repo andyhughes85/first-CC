@@ -2,7 +2,25 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+
+# Claude Code
 .claude/
+.agents/
+skills/
+skills-lock.json
+
+# Runtime data / databases
+trading_data.db
+*.db
+data/
+cache/
+
+# Generated files
+models/
+quote_image.png
+*.log
+
+# pomodoro (removed)
 pomodoro_config.json
 pomodoro_stats.json
 pomodoro_tasks.json
