@@ -187,6 +187,32 @@
             line-height: 1.6;
         }
 
+        /* QR Code */
+        .qr-section {
+            text-align: center;
+            padding: 24px 0;
+        }
+        .qr-section img {
+            width: 200px;
+            height: 200px;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+        }
+        .qr-section .bot-link {
+            display: inline-block;
+            margin-top: 12px;
+            background: #1a1a4e;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        .qr-section .bot-link:hover {
+            background: #24246e;
+        }
+
         @media (max-width: 640px) {
             .hero h1 { font-size: 2rem; }
             .hero { padding: 60px 0 48px; }
@@ -320,6 +346,17 @@
         <p style="text-align:center; color:#94a3b8; margin-top: 24px; font-size:0.85rem;">
             Telegram Bot: <strong>@wmxuangu_bot</strong> &nbsp;·&nbsp; 支持中文指令交互
         </p>
+
+        <div class="qr-section">
+            <p style="margin-bottom: 16px; color: #64748b;">手机扫码直接对话机器人</p>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://t.me/wmxuangu_bot"
+                 alt="Telegram QR Code"
+                 loading="lazy" />
+            <br>
+            <a class="bot-link" href="https://t.me/wmxuangu_bot" target="_blank" rel="noopener">
+                🤖 打开 Telegram 对话
+            </a>
+        </div>
     </div>
 </section>
 
