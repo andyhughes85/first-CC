@@ -8,6 +8,7 @@ import json
 import requests
 import signal
 import sys
+from datetime import datetime
 
 # ── 配置 ──
 TOKEN = "8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s"
@@ -55,6 +56,32 @@ def run(cmd, timeout=60):
         return f"(失败: {e})"
 
 
+# ── 命令函数（通过 python -c "from bot import cmd_xxx; cmd_xxx()" 调用）──
+
+def cmd_market():
+    """输出当前市场状态"""
+    from market_state import judge_market_state, add_index_indicators
+    from data_fetcher import fetch_index_incremental
+    idx = fetch_index_incremental()
+    idx = add_index_indicators(idx)
+    info = judge_market_state(idx)
+    print(f"状态: {info['state']}")
+    print(f"仓位上限: {info['pos_limit']:.0%}")
+    print(f"沪深300: {info['index_close']:.2f} ({info['index_pct']:+.2%})")
+    print(f"趋势: {info['trend_detail']}")
+
+
+def cmd_db():
+    """输出数据库概况"""
+    import sqlite3
+    conn = sqlite3.connect(f"{BASE_DIR}/trading_data.db")
+    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    for t in tables:
+        cnt = conn.execute(f"SELECT COUNT(*) FROM {t[0]}").fetchone()[0]
+        print(f"  {t[0]}: {cnt} 行")
+    conn.close()
+
+
 def parse_intent(text):
     """自然语言 -> (回复前缀, [命令列表])"""
     t = text.strip()
@@ -79,19 +106,8 @@ def parse_intent(text):
         ]
 
     if any(kw in t for kw in ["市场", "状态", "行情", "大盘"]):
-        code = (
-            "from market_state import judge_market_state, add_index_indicators;"
-            "from data_fetcher import fetch_index_incremental;"
-            "idx = fetch_index_incremental();"
-            "idx = add_index_indicators(idx);"
-            "info = judge_market_state(idx);"
-            "print(f'状态: {info[\"state\"]}');"
-            "print(f'仓位上限: {info[\"pos_limit\"]:.0%}');"
-            "print(f'沪深300: {info[\"index_close\"]:.2f} ({info[\"index_pct\"]:+.2%})');"
-            "print(f'趋势: {info[\"trend_detail\"]}')"
-        )
         return "当前市场状态：", [
-            f"cd {BASE_DIR} && python -c \"{code}\""
+            f"cd {BASE_DIR} && python -c \"from bot import cmd_market; cmd_market()\""
         ]
 
     if any(kw in t for kw in ["定时", "crontab", "任务", "排程"]):
@@ -103,18 +119,9 @@ def parse_intent(text):
         ]
 
     if any(kw in t for kw in ["数据库", "db", "数据量", "股票池"]):
-        code = (
-            "import sqlite3;"
-            "conn = sqlite3.connect('trading_data.db');"
-            "tables = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall();"
-            "for t in tables:"
-            "  cnt = conn.execute(f'SELECT COUNT(*) FROM {t[0]}').fetchone()[0];"
-            "  print(f'  {t[0]}: {cnt} 行');"
-            "conn.close()"
-        )
         return "数据库概况：", [
             f"ls -lh {BASE_DIR}/trading_data.db",
-            f"cd {BASE_DIR} && python -c \"{code}\"",
+            f"cd {BASE_DIR} && python -c \"from bot import cmd_db; cmd_db()\"",
         ]
 
     if any(kw in t for kw in ["帮助", "help", "命令", "功能", "怎么用"]):
