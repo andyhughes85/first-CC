@@ -29,10 +29,11 @@ class Backtest:
     """A股中线波段策略回测引擎"""
 
     def __init__(self, start_date="2018-01-01", end_date="2025-12-31",
-                 initial_capital=1_000_000):
+                 initial_capital=1_000_000, max_stocks=None):
         self.start_date = pd.Timestamp(start_date)
         self.end_date = pd.Timestamp(end_date)
         self.initial_capital = initial_capital
+        self.max_stocks = max_stocks  # None = 全部股票
 
         self.cash = initial_capital
         self.positions = {}          # code -> Position
@@ -66,6 +67,18 @@ class Backtest:
         if not stock_list.empty:
             stocks = stocks.merge(stock_list[["code", "name", "industry"]], on="code", how="left")
         stocks["date"] = pd.to_datetime(stocks["date"])
+
+        # 缩小股票池（取交易日最多的前 N 只）
+        if self.max_stocks:
+            top_codes = (
+                stocks.groupby("code").size()
+                .sort_values(ascending=False)
+                .head(self.max_stocks)
+                .index
+            )
+            stocks = stocks[stocks["code"].isin(top_codes)]
+            print(f"股票池限制: {self.max_stocks}只（按交易日数排序）")
+
         stocks = stocks.sort_values(["code", "date"]).reset_index(drop=True)
         self.stock_df = stocks
 
@@ -445,5 +458,9 @@ class Backtest:
 
 
 if __name__ == "__main__":
-    bt = Backtest(start_date="2018-01-01", end_date="2025-12-31")
+    import sys
+    max_stocks = 300
+    if "--summary" in sys.argv:
+        max_stocks = 300
+    bt = Backtest(start_date="2018-01-01", end_date="2025-12-31", max_stocks=max_stocks)
     bt.run()
