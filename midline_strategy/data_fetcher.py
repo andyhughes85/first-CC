@@ -117,11 +117,21 @@ def load_cached(table, code=None, start=None, end=None):
     return df
 
 
+def _insert_or_ignore(table, conn, keys, data_iter):
+    """INSERT OR IGNORE 避免 UNIQUE 约束冲突"""
+    columns = ", ".join(keys)
+    placeholders = ", ".join(["?" for _ in keys])
+    sql = f"INSERT OR IGNORE INTO {table} ({columns}) VALUES ({placeholders})"
+    data = list(data_iter)
+    conn.executemany(sql, data)
+    return len(data)
+
+
 def save_data(df, table):
     if df is None or df.empty:
         return
     conn = get_conn()
-    df.to_sql(table, conn, if_exists="append", index=False, method="multi", chunksize=500)
+    df.to_sql(table, conn, if_exists="append", index=False, method=_insert_or_ignore, chunksize=500)
     conn.commit()
     conn.close()
 
@@ -453,7 +463,7 @@ def _backfill_pool(conn, pool_codes, days=60, workers=3):
                 results.append(r)
 
     if results:
-        pd.concat(results, ignore_index=True).to_sql("stock_daily", conn, if_exists="append", index=False)
+        pd.concat(results, ignore_index=True).to_sql("stock_daily", conn, if_exists="append", index=False, method=_insert_or_ignore)
     n_after = pd.read_sql("SELECT count(*) as n FROM stock_daily", conn)["n"][0]
     logging.info("回填完成: %d -> %d条 (+%d)", n_before, n_after, n_after - n_before)
 
