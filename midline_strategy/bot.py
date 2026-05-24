@@ -14,7 +14,7 @@ from datetime import datetime
 TOKEN = "8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s"
 ALLOWED_CHAT_IDS = {"-5277218158", "7398413981"}
 PROXY = "socks5h://127.0.0.1:1080"
-BASE_DIR = "/root/first-CC/midline_strategy"
+BASE_DIR = "/root/midline_strategy"
 API = f"https://api.telegram.org/bot{TOKEN}"
 POLL_INTERVAL = 3  # 轮询间隔（秒）
 
@@ -109,7 +109,7 @@ def parse_intent(text):
 
     if any(kw in t for kw in ["更新", "pull", "拉取", "同步", "升级"]):
         return "正在从 GitHub 拉取最新代码...", [
-            "cd /root/first-CC && git pull"
+            "cd /root/midline_strategy && git pull"
         ]
 
     if any(kw in t for kw in ["市场", "状态", "行情", "大盘"]):
