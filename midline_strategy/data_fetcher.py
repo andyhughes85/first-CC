@@ -119,9 +119,10 @@ def load_cached(table, code=None, start=None, end=None):
 
 def _insert_or_ignore(table, conn, keys, data_iter):
     """INSERT OR IGNORE 避免 UNIQUE 约束冲突"""
+    tbl = table.name if hasattr(table, "name") else table
     columns = ", ".join(keys)
     placeholders = ", ".join(["?" for _ in keys])
-    sql = f"INSERT OR IGNORE INTO {table} ({columns}) VALUES ({placeholders})"
+    sql = f"INSERT OR IGNORE INTO {tbl} ({columns}) VALUES ({placeholders})"
     data = list(data_iter)
     conn.executemany(sql, data)
     return len(data)
