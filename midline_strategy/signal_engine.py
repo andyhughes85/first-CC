@@ -1,23 +1,31 @@
-"""信号生成引擎 — 均线多头 + 放量 + 低偏离"""
+"""信号生成引擎 — V3 单通道（SMA，反转为主）"""
 
 import pandas as pd
 import numpy as np
 from config import (
-    STOCK_MA5,
-    STOCK_MA10,
-    STOCK_MA20,
-    STOCK_MA60,
     VOL_RATIO_MIN,
     VOL_RATIO_MAX,
     MAX_DEVIATION,
 )
 
 
+def _calc_score(df):
+    """统一评分公式"""
+    return (
+        (df["ma5"] / df["ma60"] - 1) * 100
+        + df["volume_ratio"] * 0.5
+        - abs(df["deviation"]) * 50
+        + df["mom_20"] * 100
+        + df["mom_60"] * 50
+        + df["has_bdr"] * 10
+        - df["has_fb"] * 10
+        + df["has_w"] * 10
+        + df["ma_distance"] * 100
+        - df["max_dd_20"] * 50
+    )
+
+
 def generate_signals(df, hot_industries=None, market_state="oscillation"):
-    """
-    生成买入信号，返回 (signals_df, filter_stats)
-    filter_stats: 过滤漏斗统计
-    """
     if df.empty:
         return pd.DataFrame(), {}
 
@@ -25,81 +33,114 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
 
     def calc_indicators(group):
         group = group.sort_values("date")
-        group["ma5"] = group["close"].rolling(
-            STOCK_MA5, min_periods=STOCK_MA5
-        ).mean()
-        group["ma10"] = group["close"].rolling(
-            STOCK_MA10, min_periods=STOCK_MA10
-        ).mean()
-        group["ma20"] = group["close"].rolling(
-            STOCK_MA20, min_periods=STOCK_MA20
-        ).mean()
-        group["ma60"] = group["close"].rolling(
-            STOCK_MA60, min_periods=STOCK_MA60
-        ).mean()
+        group["ma5"] = group["close"].rolling(5, min_periods=5).mean()
+        group["ma10"] = group["close"].rolling(10, min_periods=10).mean()
+        group["ma20"] = group["close"].rolling(20, min_periods=20).mean()
+        group["ma60"] = group["close"].rolling(60, min_periods=60).mean()
         group["vol_ma20"] = group["volume"].rolling(20, min_periods=20).mean()
+
+        group["mom_20"] = group["close"] / group["close"].shift(20) - 1
+        group["mom_60"] = group["close"] / group["close"].shift(60) - 1
+
+        group["ema12"] = group["close"].ewm(span=12).mean()
+        group["ema26"] = group["close"].ewm(span=26).mean()
+        group["dif"] = group["ema12"] - group["ema26"]
+        group["dea"] = group["dif"].ewm(span=9).mean()
+        group["macd_bar"] = 2 * (group["dif"] - group["dea"])
+        group["divergence_bull"] = (
+            group["macd_bar"].rolling(3).mean()
+            > group["macd_bar"].shift(3).rolling(3).mean()
+        )
+
+        group["neckline"] = group["low"].rolling(20).min().shift(1)
+        group["low_60"] = group["low"].rolling(60).min()
+        group["has_bdr"] = (
+            (group["close"] > group["neckline"])
+            & (group["low_60"] < group["neckline"] * 0.97)
+        )
+
+        group["resistance"] = group["high"].rolling(20).max().shift(2)
+        group["broke_resistance"] = group["close"] > group["resistance"]
+        group["back_below"] = group["close"] < group["resistance"]
+        group["has_fb"] = (
+            group["broke_resistance"].rolling(5).max().fillna(0).astype(bool)
+            & group["back_below"]
+        )
+
+        group["low_40"] = group["low"].rolling(40).min()
+        group["hi_20"] = group["high"].rolling(20).max().shift(1)
+        group["has_w"] = (
+            ((group["low_40"] / group["low_60"] - 1).abs() < 0.03)
+            & (group["close"] > group["hi_20"])
+        )
+
+        group["ma_distance"] = (group["ma5"] - group["ma20"]) / group["ma20"]
+        group["max_dd_20"] = group["close"] / group["close"].rolling(20).max() - 1
         return group
 
     pool = (pool.set_index("code")
             .groupby(level=0, group_keys=False)
             .apply(calc_indicators)
             .reset_index())
-    pool = pool.dropna(subset=["ma5", "ma10", "ma20", "ma60", "vol_ma20"])
+
+    required_cols = ["ma5", "ma10", "ma20", "ma60", "vol_ma20",
+                     "mom_20", "mom_60", "divergence_bull",
+                     "has_bdr", "has_w", "has_fb"]
+    pool = pool.dropna(subset=required_cols)
 
     base_pool = len(pool["code"].unique())
     vol_ratio = pool["volume"] / pool["vol_ma20"]
+    deviation = (pool["close"] - pool["ma20"]) / pool["ma20"]
 
-    # 条件1：均线多头排列
     mask_trend = (
         (pool["ma5"] > pool["ma10"])
         & (pool["ma10"] > pool["ma20"])
         & (pool["ma20"] > pool["ma60"])
         & (pool["close"] > pool["ma10"])
     )
-    trend_pool = len(pool[mask_trend]["code"].unique())
-
-    # 条件2：放量（量比1.5~4.0）
-    mask_vol = (vol_ratio >= VOL_RATIO_MIN) & (vol_ratio <= VOL_RATIO_MAX)
-    vol_fail = len(pool[mask_trend & ~mask_vol]["code"].unique())
-
-    # 条件3：不偏离20日线太远（< 8%）
-    deviation = (pool["close"] - pool["ma20"]) / pool["ma20"]
     mask_dev = deviation < MAX_DEVIATION
+    mask_yang = pool["close"] > pool["open"]
+    mask_div = pool["divergence_bull"]
+    mask_caisen = (pool["has_bdr"] | pool["has_w"]) & ~pool["has_fb"]
 
-    final_mask = mask_trend & mask_vol & mask_dev
-
-    # 熊市额外收紧
-    bear_filter = 0
-    if market_state == "bear":
-        bear_mask = vol_ratio > 2.5
-        bear_filter = len(pool[final_mask & ~bear_mask]["code"].unique())
-        final_mask = final_mask & bear_mask
+    if market_state == "bull":
+        mask_vol = (vol_ratio >= VOL_RATIO_MIN) & (vol_ratio <= VOL_RATIO_MAX)
+        final_mask = mask_trend & mask_vol & mask_dev & mask_yang
+    elif market_state == "bear":
+        mask_vol_bear = vol_ratio > 2.5
+        final_mask = mask_trend & mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen
+    else:
+        mask_vol = (vol_ratio >= VOL_RATIO_MIN) & (vol_ratio <= VOL_RATIO_MAX)
+        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_div
 
     signals = pool[final_mask].copy()
+    if signals.empty:
+        return pd.DataFrame(), {
+            "base_pool": base_pool,
+            "after_trend": len(pool[mask_trend]["code"].unique()),
+            "after_all": 0,
+        }
+
+    signals["volume_ratio"] = signals["volume"] / signals["vol_ma20"]
+    signals["deviation"] = (signals["close"] - signals["ma20"]) / signals["ma20"]
+    signals["reason"] = "反转信号"
+    signals["score"] = _calc_score(signals)
+
+    industry_filter = 0
+    if hot_industries and "industry" in signals.columns:
+        before = len(signals)
+        signals = signals[
+            signals["industry"].isin(hot_industries) | signals["industry"].isna()
+        ]
+        industry_filter = before - len(signals)
 
     filter_stats = {
         "base_pool": base_pool,
-        "after_trend": trend_pool,
-        "vol_fail": vol_fail,
-        "bear_filter": bear_filter,
+        "after_trend": len(pool[mask_trend]["code"].unique()),
+        "after_all": len(signals),
+        "industry_filter": industry_filter,
+        "max_score": float(signals["score"].max()) if not signals.empty else 0,
     }
-
-    if signals.empty:
-        return pd.DataFrame(), filter_stats
-
-    signals["volume_ratio"] = signals["volume"] / signals["vol_ma20"]
-    signals["deviation"] = (
-        signals["close"] - signals["ma20"]
-    ) / signals["ma20"]
-    signals["reason"] = "均线多头+放量突破"
-
-    # 评分：综合均线强度 + 量比 + 偏离度
-    signals["score"] = (
-        (signals["ma5"] / signals["ma60"] - 1) * 100   # 均线斜率
-        + signals["volume_ratio"] * 0.5                  # 量比加分
-        - abs(signals["deviation"]) * 50                 # 偏离扣分
-    )
-    filter_stats["max_score"] = float(signals["score"].max())
 
     cols = ["code", "name", "close", "volume_ratio", "deviation", "score", "reason"]
     if "industry" in signals.columns:

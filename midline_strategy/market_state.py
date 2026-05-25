@@ -6,7 +6,7 @@ from config import MARKET_MA_SHORT, MARKET_MA_LONG, ATR_PERIOD, VOL_MA_PERIOD
 
 
 def add_index_indicators(df):
-    """为指数数据添加技术指标"""
+    """为指数数据添加技术指标（SMA）"""
     df = df.sort_values("date").reset_index(drop=True)
     df["ma_s"] = df["close"].rolling(MARKET_MA_SHORT).mean()
     df["ma_l"] = df["close"].rolling(MARKET_MA_LONG).mean()
@@ -26,7 +26,7 @@ def add_index_indicators(df):
 
 def judge_market_state(index_df):
     """
-    判断市场状态
+    判断市场状态（V3 原始分类器：成交额分位判断活跃度，不依赖MA20斜率）
 
     Returns:
         dict: {
@@ -61,7 +61,7 @@ def judge_market_state(index_df):
 
     amt_series = index_df["amt_ma20"].iloc[-lookback:]
     amt_rank = float(amt_series.rank(pct=True).iloc[-1])
-    active = amt_rank > 0.60
+    is_active = amt_rank > 0.60
 
     index_close = float(row["close"])
     index_pct = float((row["close"] - prev["close"]) / prev["close"])
@@ -71,12 +71,14 @@ def judge_market_state(index_df):
         f"波动率分位{atr_rank:.0%}, 成交额分位{amt_rank:.0%}"
     )
 
-    if trend and active and not high_vol:
+    # 牛市：趋势向上 + 成交额活跃 + 非高波
+    if trend and is_active and not high_vol:
         state, pos_limit = "bull", 0.8
-    elif (trend and not active) or (not trend and not high_vol):
-        state, pos_limit = "oscillation", 0.4
-    else:
+    # 熊市：趋势向下 + 高波
+    elif not trend and high_vol:
         state, pos_limit = "bear", 0.2
+    else:
+        state, pos_limit = "oscillation", 0.4
 
     return {
         "state": state,

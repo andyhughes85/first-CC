@@ -1,9 +1,63 @@
 """推送模块 v2.0 — 基础推送 + 日报 + 周报 (Telegram)"""
 
+import re
 import requests
 import logging
 from datetime import datetime, timedelta
-from config import PUSH_TYPE, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, SERVERCHAN_KEY, TELEGRAM_PROXY
+from config import PUSH_TYPE, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, SERVERCHAN_KEY, TELEGRAM_PROXY, MAX_POSITION_PER_STOCK
+
+# 行业短名映射（CSRC 代码 → 可读简称）
+_INDUSTRY_SHORT_NAMES = {
+    "C39计算机、通信和其他电子设备制造业": "电子",
+    "C35专用设备制造业": "专用设备",
+    "C26化学原料和化学制品制造业": "化工",
+    "I65软件和信息技术服务业": "软件",
+    "C38电气机械和器材制造业": "电气设备",
+    "C27医药制造业": "医药",
+    "C34通用设备制造业": "通用设备",
+    "C36汽车制造业": "汽车",
+    "C29橡胶和塑料制品业": "橡塑",
+    "C30非金属矿物制品业": "非金属材料",
+    "C33金属制品业": "金属制品",
+    "D44电力、热力生产和供应业": "电力",
+    "C32有色金属冶炼和压延加工业": "有色",
+    "C37铁路、船舶、航空航天和其他运输设备制造业": "运输设备",
+    "C40仪器仪表制造业": "仪器仪表",
+    "C31黑色金属冶炼和压延加工业": "钢铁",
+    "C13农副食品加工业": "食品加工",
+    "C15酒、饮料和精制茶制造业": "酒饮料",
+    "C14食品制造业": "食品制造",
+    "C17纺织业": "纺织",
+    "C25石油、煤炭及其他燃料加工业": "石化燃料",
+    "C28化学纤维制造业": "化纤",
+    "I64互联网和相关服务": "互联网",
+    "J66货币金融服务": "银行",
+    "J67资本市场服务": "证券",
+    "J68保险业": "保险",
+    "K70房地产业": "房地产",
+    "F51批发业": "批发",
+    "F52零售业": "零售",
+    "L72商务服务业": "商务服务",
+    "M73研究和试验发展": "科研",
+    "M74专业技术服务业": "专业技术",
+    "N77生态保护和环境治理业": "环保",
+    "Q83卫生": "医疗",
+    "R86广播、电视、电影和影视录音制作业": "影视传媒",
+    "R87文化艺术业": "文化艺术",
+    "C41其他制造业": "其他制造",
+    "C42废弃资源综合利用业": "资源回收",
+}
+
+
+def _shorten_industry(name):
+    """将行业名转为短名，如 C26化学原料 → 化工"""
+    if not name:
+        return name
+    # 先查映射表
+    if name in _INDUSTRY_SHORT_NAMES:
+        return _INDUSTRY_SHORT_NAMES[name]
+    # 无映射则去掉字母+数字前缀
+    return re.sub(r"^[A-Z]\d+", "", name)
 
 
 def _tg_session():
@@ -50,6 +104,89 @@ def _send_serverchan(title, desp):
 
 # ==================== 日报 ====================
 
+def _position_advice(score, volume_ratio, deviation, market_state, pos_limit):
+    """根据信号强度和市况生成建仓意见"""
+    max_per_stock = MAX_POSITION_PER_STOCK  # 单股上限
+
+    # 信号强度分级
+    if score > 30:
+        strength = "强"
+        suggested = min(pos_limit * 0.3, max_per_stock)
+    elif score > 15:
+        strength = "中"
+        suggested = min(pos_limit * 0.2, max_per_stock)
+    else:
+        strength = "弱"
+        suggested = min(pos_limit * 0.1, max_per_stock)
+
+    # 建仓方式
+    if deviation < 0.02 and volume_ratio > 1.5:
+        method = "可现价建仓"
+    elif deviation < 0.02:
+        method = "可建仓"
+    else:
+        method = "回踩20日线建仓"
+
+    # 信号备注
+    note_parts = []
+    if volume_ratio > 3.0:
+        note_parts.append("放量过激")
+    elif volume_ratio > 2.0:
+        note_parts.append("放量良好")
+    if deviation > 0.05:
+        note_parts.append("偏离偏大")
+    if score > 30:
+        note_parts.append("高分信号")
+    note = " | ".join(note_parts) if note_parts else "-"
+
+    return strength, suggested, method, note
+
+
+def _summary_analysis(signals_df, market_state):
+    """生成信号总结分析"""
+    if signals_df is None or signals_df.empty:
+        return ""
+    lines = []
+    n = len(signals_df)
+
+    # 强度分布
+    strong = sum(1 for s in signals_df["score"] if s > 30)
+    medium = sum(1 for s in signals_df["score"] if 15 < s <= 30)
+    weak = n - strong - medium
+    dist_parts = []
+    if strong:
+        dist_parts.append(f"强{strong}")
+    if medium:
+        dist_parts.append(f"中{medium}")
+    if weak:
+        dist_parts.append(f"弱{weak}")
+    lines.append(f"- 信号分布: {', '.join(dist_parts)}只")
+
+    # 行业分布
+    if "industry" in signals_df.columns:
+        top_inds = signals_df["industry"].value_counts().head(3)
+        ind_str = " | ".join(f"{_shorten_industry(ind)}({cnt}只)" for ind, cnt in top_inds.items())
+        lines.append(f"- 行业集中: {ind_str}")
+
+    # LGB 评分区间（如有）
+    if "lgb_score" in signals_df.columns:
+        lgb_min = signals_df["lgb_score"].min()
+        lgb_max = signals_df["lgb_score"].max()
+        lines.append(f"- LGB评分: {lgb_min:.4f} ~ {lgb_max:.4f}")
+
+    # 市况建议
+    state_advice = {
+        "bull": "多头市场，按信号分批建仓",
+        "oscillation": "震荡市，总仓不超过40%，高分信号优先",
+        "bear": "熊市仅轻仓参与，严格止损",
+        "wait": "数据不足，暂不操作",
+    }
+    advice = state_advice.get(market_state, "控制仓位，注意风险")
+    lines.append(f"- 操作建议: {advice}")
+
+    return "\n".join(lines)
+
+
 def send_daily_report(
     market_state: str,
     pos_limit: float,
@@ -64,6 +201,7 @@ def send_daily_report(
     vol_anomalies: list = None,
     pe_cheap: list = None,
     consecutive_empty: int = 0,
+    signals_df=None,
 ):
     """推送中线波段日报到 Telegram"""
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -82,10 +220,10 @@ def send_daily_report(
         inds = []
         for item in hot_industries[:5]:
             if isinstance(item, (list, tuple)):
-                name, mom = item[0], item[1] if len(item) > 1 else ""
+                name, mom = _shorten_industry(item[0]), item[1] if len(item) > 1 else ""
                 inds.append(f"{name}({mom:+.1%})" if isinstance(mom, (int, float)) else name)
             else:
-                inds.append(str(item))
+                inds.append(_shorten_industry(str(item)))
         lines.append("【行业TOP5】")
         lines.append("  ".join(inds) + "\n")
 
@@ -94,17 +232,67 @@ def send_daily_report(
     if filter_stats:
         parts = []
         if "base_pool" in filter_stats:
-            parts.append(f"基础池{filter_stats['base_pool']}")
+            parts.append(f"基础{filter_stats['base_pool']}")
         if "after_trend" in filter_stats:
-            parts.append(f"均线过滤{filter_stats['after_trend']}")
+            parts.append(f"均线{filter_stats['after_trend']}")
         if "vol_fail" in filter_stats:
-            parts.append(f"量能过滤{filter_stats['vol_fail']}")
+            parts.append(f"量能-{filter_stats['vol_fail']}")
+        if "div_fail" in filter_stats:
+            parts.append(f"底背驰-{filter_stats['div_fail']}")
+        if "caisen_fail" in filter_stats:
+            parts.append(f"形态-{filter_stats['caisen_fail']}")
+        if "industry_filter" in filter_stats and filter_stats["industry_filter"]:
+            parts.append(f"行业-{filter_stats['industry_filter']}")
         if "bear_filter" in filter_stats:
-            parts.append(f"熊市过滤{filter_stats['bear_filter']}")
+            parts.append(f"熊市-{filter_stats['bear_filter']}")
+        if "bottleneck" in filter_stats and filter_stats["bottleneck"]:
+            parts.append(f"瓶颈-{filter_stats['bottleneck']}")
         if parts:
             lines.append(" > " + " → ".join(parts))
         if filter_stats.get("max_score"):
             lines.append(f"最高评分: {filter_stats['max_score']:.2f}")
+    lines.append("")
+
+    # 个股推荐+建仓意见
+    if signals_df is not None and not signals_df.empty:
+        lines.append("【个股推荐】")
+        for i, (_, row) in enumerate(signals_df.head(10).iterrows(), 1):
+            name = row.get("name", "")
+            code = row.get("code", "")
+            score = row.get("score", 0)
+            vol_ratio = row.get("volume_ratio", 0)
+            dev = row.get("deviation", 0)
+            ind = _shorten_industry(row.get("industry", ""))
+
+            strength, pos_advice, method, note = _position_advice(
+                score, vol_ratio, dev, market_state, pos_limit
+            )
+
+            line = f"{i}. {name}({code})"
+            if ind:
+                line += f" | {ind}"
+            line += f"\n   评分{score:.1f} | 量比{vol_ratio:.1f} | 偏离{dev:+.2%}"
+            line += f"\n   [{strength}] {pos_advice:.0%}仓位 | {method}"
+            if note != "-":
+                line += f" | {note}"
+            lines.append(line)
+        lines.append("")
+
+    # 总结分析
+    lines.append("【总结】")
+    if signals_df is not None and not signals_df.empty:
+        lines.append(_summary_analysis(signals_df, market_state))
+    else:
+        parts = []
+        if filter_stats:
+            parts.append(f"基础池{filter_stats.get('base_pool','?')}只")
+            parts.append(f"均线多头{filter_stats.get('after_trend','?')}只")
+        if filter_stats and filter_stats.get("bottleneck"):
+            parts.append(f"卡在{filter_stats['bottleneck']}过滤环节")
+        if parts:
+            lines.append("今日无信号，过滤漏斗: " + " → ".join(parts))
+        else:
+            lines.append("今日无信号，继续观察。")
     lines.append("")
 
     # 量能异常

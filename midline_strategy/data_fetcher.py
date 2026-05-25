@@ -92,6 +92,16 @@ def get_conn():
             name TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS market_state_history (
+            date TEXT PRIMARY KEY,
+            state TEXT NOT NULL,
+            pos_limit REAL NOT NULL,
+            index_close REAL,
+            trend_detail TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
     conn.commit()
     return conn
 
@@ -109,7 +119,8 @@ def load_cached(table, code=None, start=None, end=None):
     if end:
         query += " AND date<=?"
         params.append(end)
-    query += " ORDER BY date"
+    if start or end or code:
+        query += " ORDER BY date"
     df = pd.read_sql(query, conn, params=params)
     conn.close()
     if not df.empty and "date" in df.columns:
@@ -132,9 +143,26 @@ def save_data(df, table):
     if df is None or df.empty:
         return
     conn = get_conn()
-    df.to_sql(table, conn, if_exists="append", index=False, method=_insert_or_ignore, chunksize=500)
-    conn.commit()
-    conn.close()
+    try:
+        df.to_sql(table, conn, if_exists="append", index=False, method=_insert_or_ignore, chunksize=500)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def save_market_state(date, state, pos_limit, index_close, trend_detail):
+    """持久化每日市场状态"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO market_state_history
+               (date, state, pos_limit, index_close, trend_detail)
+               VALUES (?, ?, ?, ?, ?)""",
+            (date, state, pos_limit, index_close, trend_detail),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ==================== 股票列表 & 行业分类 ====================
@@ -483,8 +511,16 @@ def update_stock_data_daily(pool_codes, lookback_days=120, max_workers=5):
 
     if not has_today:
         saved = 0
+
+        def _fetch_one(code):
+            """Sina → BaoStock 双源降级"""
+            df = _fetch_stock_sina(code, today, today)
+            if df is None or df.empty:
+                df = _fetch_stock_bs(code, today, today)
+            return df
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_fetch_stock_sina, code, today, today): code for code in pool_codes}
+            futures = {executor.submit(_fetch_one, code): code for code in pool_codes}
             for future in concurrent.futures.as_completed(futures):
                 code = futures[future]
                 try:

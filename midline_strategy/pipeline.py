@@ -4,13 +4,18 @@ import schedule
 import time
 import logging
 import pandas as pd
+import numpy as np
+import os
 from datetime import datetime, timedelta
-from data_fetcher import fetch_daily_data
+from data_fetcher import fetch_daily_data, save_market_state, load_cached
 from market_state import judge_market_state, add_index_indicators
 from signal_engine import generate_signals
 from push_service import send, send_test, send_daily_report, send_weekly_report
 from utils import is_trade_day
 from config import DB_PATH, SCHEDULE_TIME, SCHEDULE_RETRY_TIME
+from lgb_features import build_lgb_features, get_lgb_feature_cols
+from lgb_model import LightGBMModel
+from hmm_market import train_hmm_model, load_hmm_model, save_hmm_model, predict_market_state
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,18 +27,112 @@ logging.basicConfig(
 _consecutive_empty = 0
 _daily_state_history = []  # [(date, state, pos_limit, reason), ...]
 
+# LightGBM 评分模型（懒加载）
+_lgb_model = None
 
-def get_hot_industries():
-    """简易行业动量筛选（返回前N个申万一级行业）"""
+# HMM 市场状态模型（懒加载）
+_hmm_model = None
+_hmm_scaler = None
+_hmm_state_map = None
+_hmm_trained = False
+
+
+def _ensure_hmm(index_df):
+    """确保 HMM 模型已加载/训练，返回 (label, probs) 或 (None, None)"""
+    global _hmm_model, _hmm_scaler, _hmm_state_map, _hmm_trained
+
+    if _hmm_model is None:
+        _hmm_model, _hmm_scaler, _hmm_state_map = load_hmm_model()
+    if _hmm_model is not None:
+        return predict_market_state(index_df, _hmm_model, _hmm_scaler, _hmm_state_map)
+
+    # 首次运行：用全部指数数据训练
+    if not _hmm_trained and len(index_df) >= 252:
+        try:
+            logging.info("首次训练 HMM 模型（%d 条数据）...", len(index_df))
+            _hmm_model, _hmm_scaler, _hmm_state_map = train_hmm_model(index_df)
+            save_hmm_model(_hmm_model, _hmm_scaler, _hmm_state_map)
+            _hmm_trained = True
+            logging.info("HMM 模型训练完成: %s", _hmm_state_map)
+            return predict_market_state(index_df, _hmm_model, _hmm_scaler, _hmm_state_map)
+        except Exception as e:
+            logging.warning("HMM 训练失败: %s", e)
+            _hmm_trained = True  # 避免重复失败
+    return None, None
+
+
+def _load_lgb_model():
+    global _lgb_model
+    if _lgb_model is not None:
+        return _lgb_model
+    # 切换到脚本目录（避免中文路径导致 LightGBM 加载失败）
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    old_cwd = os.getcwd()
+    os.chdir(script_dir)
     try:
-        import akshare as ak
-
-        df = ak.stock_board_industry_name_ths()
-        names = df["name"].tolist()
-        return names[:5] if len(names) >= 5 else names
+        model = LightGBMModel()
+        model.load("models/lgb_midline.txt")
+        _lgb_model = model
+        logging.info("LGB 模型加载成功")
+        return model
     except Exception as e:
-        logging.warning("行业数据获取失败: %s，使用默认列表", e)
-        return ["电子", "医药生物", "电力设备", "食品饮料", "汽车"]
+        logging.error("LGB 模型加载失败: %s", e)
+        return None
+    finally:
+        os.chdir(old_cwd)
+
+
+def _lgb_rerank(signals, stocks_df):
+    """用 LightGBM 模型对信号重排序"""
+    model = _load_lgb_model()
+    if model is None or signals.empty:
+        return signals
+    feature_cols = get_lgb_feature_cols()
+    scores = []
+    for _, row in signals.iterrows():
+        code = row["code"]
+        hist = stocks_df[stocks_df["code"] == code].sort_values("date").copy()
+        if len(hist) < 80:
+            scores.append(0)
+            continue
+        try:
+            feat = build_lgb_features(hist)
+            last = feat.iloc[-1:][feature_cols].fillna(0)
+            proba = model.predict(last)[0]
+            scores.append(round(proba, 4))
+        except Exception as e:
+            logging.debug("LGB 评分异常 %s: %s", code, e)
+            scores.append(0)
+    signals = signals.copy()
+    signals["lgb_score"] = scores
+    return signals.sort_values("lgb_score", ascending=False)
+
+
+def get_hot_industries(stocks_df):
+    """从个股数据计算行业动量，返回行业代码列表（与stock_list匹配）"""
+    if stocks_df.empty or "industry" not in stocks_df.columns:
+        return []
+
+    # 获取每只股票最新 & 20天前的收盘价
+    stocks_df["date"] = pd.to_datetime(stocks_df["date"])
+    recent = stocks_df.sort_values("date").groupby("code").last().reset_index()
+    oldest_dates = stocks_df["date"].max() - timedelta(days=30)
+    oldest = (stocks_df[stocks_df["date"] >= oldest_dates]
+              .sort_values("date").groupby("code").first().reset_index())
+
+    ret = recent.merge(oldest, on="code", suffixes=("", "_old"))
+    ret["momentum"] = ret["close"] / ret["close_old"] - 1
+
+    # 过滤有效行业（≥20只股票）
+    ind_sizes = ret["industry"].value_counts()
+    valid = ind_sizes[ind_sizes >= 20].index
+    ret = ret[ret["industry"].isin(valid)]
+
+    if ret.empty:
+        return []
+
+    top = ret.groupby("industry")["momentum"].median().sort_values(ascending=False)
+    return top.head(8).index.tolist()
 
 
 def daily_job():
@@ -53,11 +152,12 @@ def daily_job():
         ms, pos = market_info["state"], market_info["pos_limit"]
         logging.info("市场状态: %s, 仓位上限: %.0f%%", ms, pos * 100)
 
-        hot = get_hot_industries()
+        hot = get_hot_industries(data.get("stocks", pd.DataFrame()))
         logging.info("强势行业: %s", hot)
 
         stocks_df = data.get("stocks", pd.DataFrame())
         signals, filter_stats = generate_signals(stocks_df, hot, ms)
+        signals = _lgb_rerank(signals, stocks_df)
 
         signal_count = len(signals)
         if signal_count > 0:
@@ -67,10 +167,14 @@ def daily_job():
             _consecutive_empty += 1
             logging.info("今日无信号（连续空仓 %d 天）", _consecutive_empty)
 
-        # 记录状态历史
+        # 记录状态历史（内存+DB持久化）
         _daily_state_history.append((
             datetime.now().strftime("%Y-%m-%d"), ms, pos, market_info.get("trend_detail", "")
         ))
+        save_market_state(
+            datetime.now().strftime("%Y-%m-%d"), ms, pos,
+            market_info.get("index_close", 0), market_info.get("trend_detail", ""),
+        )
 
         # 推送日报
         send_daily_report(
@@ -85,6 +189,7 @@ def daily_job():
             signal_count=signal_count,
             filter_stats=filter_stats,
             consecutive_empty=_consecutive_empty,
+            signals_df=signals if not signals.empty else None,
         )
     except Exception as e:
         logging.error("任务失败: %s", e, exc_info=True)
