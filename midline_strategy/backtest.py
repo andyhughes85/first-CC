@@ -300,6 +300,11 @@ class Backtest:
             + df["has_divergence"] * 5     # 底背驰加分
         )
 
+        # 保存全量预计算数据（含ATR、均线），供 _sell_check 使用
+        self._full_signal_df = df.set_index(["code", "date"])
+        # 将ATR注入 _by_code_date，供卖出逻辑使用
+        self._by_code_date["atr"] = self._full_signal_df["atr"]
+
         sig = df[df["signal_base"]].copy()
         self._sig_df = sig
         self._sig_by_date = {d: g for d, g in sig.groupby("date")}
@@ -407,6 +412,8 @@ class Backtest:
             # 更新持仓最高价
             pos["highest_close"] = max(pos["highest_close"], close)
 
+            atr_e = pos.get("atr_entry", 0) or 0
+            use_atr = atr_e > 0  # ATR有效时才用自适应出场
             reason = None
 
             # 1. 统一止损（所有市场）
@@ -416,8 +423,11 @@ class Backtest:
             # 2. 根据市场状态判断止盈/时间止损
             if reason is None:
                 if state == "bull":
-                    # 牛市：纯移动止盈（最高回撤8%），不设时间止损
-                    trail_stop = pos["highest_close"] * 0.92
+                    if use_atr:
+                        # 牛市：ATR自适应移动止盈（3倍ATR，高波放宽/低波收紧）
+                        trail_stop = pos["highest_close"] - atr_e * 3
+                    else:
+                        trail_stop = pos["highest_close"] * 0.92  # 回退固定值
                     if close <= trail_stop:
                         reason = "牛市移动止盈"
                 elif state == "bear":
@@ -427,23 +437,28 @@ class Backtest:
                     elif hold >= 10:
                         reason = "熊市时间止损"
                 else:
-                    # 震荡市：固定10%止盈 + 15天时间止损（V3原逻辑）
+                    # 震荡市：ATR自适应止盈 + 15天时间止损
                     if hold >= BT.TIME_STOP:
                         reason = "震荡时间止损"
                     elif pnl >= 0.10:
                         pos["trailing_activated"] = True
                     if pos.get("trailing_activated"):
-                        trailing_stop = max(pos["highest_close"] * 0.95, pos["buy_price"] * 1.03)
+                        if use_atr:
+                            trailing_stop = max(pos["highest_close"] - atr_e * 2, pos["buy_price"] * 1.03)
+                        else:
+                            trailing_stop = max(pos["highest_close"] * 0.95, pos["buy_price"] * 1.03)
                         if close <= trailing_stop:
                             reason = "震荡移动止盈"
 
-            # 3. 趋势破坏（所有市场统一，2%缓冲区避免假信号）
+            # 3. 趋势破坏（ATR自适应，跌破MA10的1.5倍ATR）
             if reason is None:
                 hist = self._by_code_date.loc[code]
                 hist = hist[hist.index.get_level_values("date") <= date]
                 if len(hist) >= STOCK_MA10:
                     ma10 = hist["close"].rolling(STOCK_MA10).mean().iloc[-1]
-                    if close < ma10 * 0.96:
+                    curr_atr = max(hist["atr"].iloc[-1], pos["atr_entry"]) if use_atr else 0
+                    trend_break_threshold = ma10 - curr_atr * 1.5 if curr_atr > 0 else ma10 * 0.96
+                    if close < trend_break_threshold:
                         reason = "趋势破坏"
                 # 海龟10日低点出场（提前止损避免更大亏损）
                 if reason is None and len(hist) >= 11:
@@ -617,6 +632,7 @@ class Backtest:
                 continue
 
             self.cash -= cost
+            atr_val = row.get("atr", 0) or 0
             self.positions[code] = {
                 "code": code,
                 "name": row.get("name", ""),
@@ -625,6 +641,7 @@ class Backtest:
                 "shares": shares,
                 "highest_close": buy_price,
                 "trailing_activated": False,
+                "atr_entry": atr_val,  # 买入时ATR，用于自适应出场
             }
 
     def _market_value(self, date):
