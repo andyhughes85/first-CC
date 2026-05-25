@@ -159,6 +159,15 @@ def daily_job():
         signals, filter_stats = generate_signals(stocks_df, hot, ms)
         signals = _lgb_rerank(signals, stocks_df)
 
+        # 虚拟盘自动交易
+        try:
+            from paper_trader import PaperTrader
+            _trader = PaperTrader()
+            _trader.process(signals, market_info, stocks_df, datetime.now())
+            logging.info("虚拟盘处理完成，持仓 %d 只", _trader.get_summary()["position_count"])
+        except Exception as e:
+            logging.error("虚拟盘处理失败: %s", e, exc_info=True)
+
         signal_count = len(signals)
         if signal_count > 0:
             _consecutive_empty = 0
