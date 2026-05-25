@@ -10,6 +10,8 @@ STOCK_MA20 = 20
 STOCK_MA60 = 60
 VOL_RATIO_MIN = 1.2
 VOL_RATIO_MAX = 4.0
+VOL_RATIO_MIN_BULL = 1.5    # 牛市放量下限（高于震荡市，过滤跟风盘）
+VOL_RATIO_MIN_OSC = 1.0     # 震荡市放量下限（降低门槛，增加信号）
 MAX_DEVIATION = 0.05
 
 # ================== KAMA 自适应均线 ==================

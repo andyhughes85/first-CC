@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 
 from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION, \
-    KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN
+    KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN, VOL_RATIO_MIN_BULL, VOL_RATIO_MIN_OSC
 from data_fetcher import load_cached
 from market_state import judge_market_state, add_index_indicators
 from lgb_features import get_lgb_feature_cols
@@ -37,7 +37,8 @@ class Backtest:
     """A股中线波段策略回测引擎"""
 
     def __init__(self, start_date="2018-01-01", end_date="2025-12-31",
-                 initial_capital=1_000_000, max_stocks=None, lgb_model_path=None):
+                 initial_capital=1_000_000, max_stocks=None, lgb_model_path=None,
+                 meta_threshold=0.5):
         self.start_date = pd.Timestamp(start_date)
         self.end_date = pd.Timestamp(end_date)
         self.initial_capital = initial_capital
@@ -49,6 +50,7 @@ class Backtest:
         self.trades = []             # 已完成的交易
         self._daily_signal_count = 0
         self.lgb_model = None
+        self.meta_threshold = meta_threshold
 
         # 加载数据（含温漂）
         warmup = timedelta(days=180)
@@ -320,6 +322,10 @@ class Backtest:
 
         n_over = (self._sig_df["lgb_score"] > 0.5).sum()
         print(f"LightGBM 评分完成: {len(self._sig_df)} 条信号, >0.5={n_over} 条")
+        for q in [10, 25, 50, 75, 90, 95, 99]:
+            v = self._sig_df["lgb_score"].quantile(q / 100)
+            print(f"  P{q}: {v:.4f}")
+        print(f"  均值: {self._sig_df['lgb_score'].mean():.4f}")
 
     # ---- 市场状态预计算 ----
 
@@ -497,7 +503,14 @@ class Backtest:
         if target.empty:
             return
 
-        vol_ok = (target["vol_ratio"] >= VOL_RATIO_MIN) & (target["vol_ratio"] <= VOL_RATIO_MAX)
+        # 市场状态自适应放量阈值
+        if state == "bull":
+            _vol_min = VOL_RATIO_MIN_BULL
+        elif state == "oscillation":
+            _vol_min = VOL_RATIO_MIN_OSC
+        else:
+            _vol_min = VOL_RATIO_MIN
+        vol_ok = (target["vol_ratio"] >= _vol_min) & (target["vol_ratio"] <= VOL_RATIO_MAX)
 
         # V3 单通道：市场状态决定过滤强度
         if state == "bull":
@@ -522,9 +535,13 @@ class Backtest:
         if ch.empty:
             return
 
-        # LightGBM 评分辅助排序（不硬过滤，加权到总分中）
+        # Meta-Labeling 硬过滤：只取模型预测概率 >= 阈值的信号
         if self.lgb_model is not None and "lgb_score" in ch.columns:
-            ch["score"] = ch["score"] + ch["lgb_score"] * 10
+            before = len(ch)
+            ch = ch[ch["lgb_score"] >= self.meta_threshold]
+            filtered = before - len(ch)
+            if filtered:
+                print(f"  Meta-Labeling 过滤: {filtered}/{before} 条 (阈值={self.meta_threshold})")
 
         ch = ch.sort_values("score", ascending=False)
 
@@ -788,12 +805,19 @@ if __name__ == "__main__":
     import sys
     max_stocks = 280
     lgb_path = None
+    meta_threshold = 0.5
     if "--summary" in sys.argv:
         max_stocks = 280
     if "--lgb" in sys.argv:
         lgb_path = "models/lgb_midline.txt"
     if "--lgb-meta" in sys.argv:
         lgb_path = "models/lgb_meta.txt"
+    if "--lgb-meta-triple" in sys.argv:
+        lgb_path = "models/lgb_meta_triple.txt"
+    for i, arg in enumerate(sys.argv):
+        if arg == "--meta-threshold" and i + 1 < len(sys.argv):
+            meta_threshold = float(sys.argv[i + 1])
     bt = Backtest(start_date="2018-01-01", end_date="2025-12-31",
-                  max_stocks=max_stocks, lgb_model_path=lgb_path)
+                  max_stocks=max_stocks, lgb_model_path=lgb_path,
+                  meta_threshold=meta_threshold)
     bt.run()

@@ -6,6 +6,8 @@ from config import (
     VOL_RATIO_MIN,
     VOL_RATIO_MAX,
     MAX_DEVIATION,
+    VOL_RATIO_MIN_BULL,
+    VOL_RATIO_MIN_OSC,
 )
 
 
@@ -104,13 +106,13 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
     mask_caisen = (pool["has_bdr"] | pool["has_w"]) & ~pool["has_fb"]
 
     if market_state == "bull":
-        mask_vol = (vol_ratio >= VOL_RATIO_MIN) & (vol_ratio <= VOL_RATIO_MAX)
+        mask_vol = (vol_ratio >= VOL_RATIO_MIN_BULL) & (vol_ratio <= VOL_RATIO_MAX)
         final_mask = mask_trend & mask_vol & mask_dev & mask_yang
     elif market_state == "bear":
         mask_vol_bear = vol_ratio > 2.5
         final_mask = mask_trend & mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen
     else:
-        mask_vol = (vol_ratio >= VOL_RATIO_MIN) & (vol_ratio <= VOL_RATIO_MAX)
+        mask_vol = (vol_ratio >= VOL_RATIO_MIN_OSC) & (vol_ratio <= VOL_RATIO_MAX)
         final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_div
 
     signals = pool[final_mask].copy()

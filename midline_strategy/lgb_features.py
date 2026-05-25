@@ -124,3 +124,74 @@ def add_meta_label(sig_df, stock_df, forward_days=20, threshold=0.02):
     sig["meta_label"] = (sig["forward_ret"] > threshold).astype(int)
     sig["meta_label"] = sig["meta_label"].where(sig["forward_ret"].notna(), np.nan)
     return sig
+
+
+def triple_barrier_meta_label(sig_df, stock_df, upper_pct=0.10, lower_pct=0.07, max_days=15):
+    """三柱法元标注 — 匹配实际交易规则
+
+    对每个信号事件模拟持仓，判断哪个障碍先触达：
+      - 上界 (+upper_pct): 止盈 → label=1（盈利交易）
+      - 下界 (-lower_pct): 止损 → label=0
+      - 垂直界 (max_days 日): 时间止损 → label=0
+
+    sig_df:   信号事件 DataFrame, 必须有 code, date, close 列
+    stock_df: 全量日线数据, 必须有 code, date, high, low, close 列
+    upper_pct: 止盈幅度（默认 0.10 = +10%）
+    lower_pct: 止损幅度（默认 0.07 = -7%）
+    max_days:  最长持仓天数（默认 15 日）
+    """
+    tmp = stock_df[["code", "date", "high", "low", "close"]].copy()
+    sig = sig_df.copy()
+
+    def _label_one_stock(ss, pp):
+        pp = pp.sort_values("date").reset_index(drop=True)
+        date_idx = pd.Series(pp.index, index=pp["date"])
+        sig_indices = ss["date"].map(date_idx)
+
+        labels = []
+        for i, idx in enumerate(sig_indices):
+            if pd.isna(idx):
+                labels.append(np.nan)
+                continue
+            idx = int(idx)
+            entry = ss.iloc[i]["close"]
+            upper = entry * (1 + upper_pct)
+            lower = entry * (1 - lower_pct)
+
+            future = pp.iloc[idx + 1: idx + 1 + max_days]
+            if len(future) == 0:
+                labels.append(np.nan)
+                continue
+
+            hit_upper = (future["high"] >= upper)
+            hit_lower = (future["low"] <= lower)
+
+            if hit_upper.any() and not hit_lower.any():
+                labels.append(1)
+            elif hit_lower.any() and not hit_upper.any():
+                labels.append(0)
+            elif hit_upper.any() and hit_lower.any():
+                first_up = hit_upper.idxmax()
+                first_lo = hit_lower.idxmax()
+                labels.append(1 if first_up <= first_lo else 0)
+            else:
+                labels.append(0)
+
+        return labels
+
+    result_parts = []
+    for code, sigs in sig.groupby("code", sort=False):
+        pp = tmp[tmp["code"] == code]
+        if pp.empty:
+            continue
+        labels = _label_one_stock(sigs.reset_index(drop=True), pp)
+        sigs_part = sigs.copy()
+        sigs_part["triple_barrier_label"] = labels
+        result_parts.append(sigs_part)
+
+    if not result_parts:
+        sig["triple_barrier_label"] = np.nan
+        return sig
+
+    final = pd.concat(result_parts, ignore_index=True)
+    return final

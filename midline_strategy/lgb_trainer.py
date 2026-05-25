@@ -10,7 +10,7 @@ from datetime import datetime
 
 from data_fetcher import load_cached
 from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION
-from lgb_features import build_lgb_features, create_label, get_lgb_feature_cols, add_meta_label
+from lgb_features import build_lgb_features, create_label, get_lgb_feature_cols, add_meta_label, triple_barrier_meta_label
 from lgb_model import LightGBMModel, FORWARD_DAYS, BUY_THRESHOLD
 
 MODEL_DIR = "models"
@@ -243,12 +243,92 @@ def train_meta():
     return True
 
 
+def train_meta_triple_barrier():
+    """三柱法元标注训练 — 使用 Purged K-Fold CV
+
+    标签规则匹配实际交易止盈止损：
+      - 上界 +10%（止盈）→ label=1
+      - 下界 -7%（止损）→ label=0
+      - 15日时间止损 → label=0
+    验证方法：Purged K-Fold（防时间泄漏）
+    """
+    from config import TAKE_PROFIT, STOP_LOSS, TIME_STOP_DAYS
+
+    upper_pct = TAKE_PROFIT          # 0.10
+    lower_pct = abs(STOP_LOSS)       # 0.07
+    max_days = TIME_STOP_DAYS        # 15
+
+    print("=" * 60)
+    print("模式: 三柱法元标注（Purged K-Fold CV）")
+    print(f"上界: +{upper_pct:.0%} | 下界: -{lower_pct:.0%} | 垂直界: {max_days}日")
+    print("=" * 60)
+
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    feature_cols = get_lgb_feature_cols()
+
+    # 1. 加载数据
+    print("\n[1/4] 加载训练数据...")
+    stocks = load_training_data()
+
+    # 2. 计算信号事件（compute_signals 已包含所有 LGB 特征列）
+    print("\n[2/4] 计算信号事件...")
+    sig_df = compute_signals(stocks)
+    print(f"  信号事件: {len(sig_df)} 条, {sig_df['code'].nunique()} 只股票")
+
+    # 验证特征列是否齐全
+    missing_cols = [c for c in feature_cols if c not in sig_df.columns]
+    if missing_cols:
+        raise ValueError(f"compute_signals 缺少特征: {missing_cols}")
+
+    # 3. 三柱法打标签
+    print("\n[3/4] 三柱法标注...")
+    meta_df = triple_barrier_meta_label(
+        sig_df, stocks, upper_pct=upper_pct, lower_pct=lower_pct, max_days=max_days
+    )
+    meta_df.rename(columns={"triple_barrier_label": "label"}, inplace=True)
+    meta_df = meta_df.dropna(subset=feature_cols + ["label"])
+    print(f"  有效样本: {len(meta_df)} 条")
+    print(f"  正样本率: {meta_df['label'].mean():.2%}")
+    print(f"  时间范围: {meta_df['date'].min()} ~ {meta_df['date'].max()}")
+
+    # 4. Purged K-Fold 训练
+    print("\n[4/4] Purged K-Fold 训练...")
+    model = LightGBMModel()
+    cv_metrics = model.train_purged(
+        meta_df, feature_cols, date_col="date",
+        max_forward=max_days, n_splits=5, embargo=5,
+    )
+
+    # 特征重要性
+    importance = model.get_feature_importance(15)
+    print("\n  特征重要性 Top 15:")
+    for _, r in importance.iterrows():
+        print(f"    {r['feature']:20s}: {r['importance']:.2f}")
+
+    model_path = os.path.join(MODEL_DIR, "lgb_meta_triple.txt")
+    model.save(model_path)
+    print(f"\n模型已保存: {model_path}")
+
+    print("\n" + "=" * 60)
+    if model.cv_summary:
+        print(f"CV AUC:     {model.cv_summary['auc_mean']:.4f} "
+              f"±{model.cv_summary['auc_std']:.4f}")
+        print(f"Best Fold:  {model.cv_summary['best_fold']}")
+    print(f"N Folds:    {model.cv_summary['n_folds'] if model.cv_summary else 0}")
+    print("=" * 60)
+    return True
+
+
 if __name__ == "__main__":
     mode = "primary"
     if "--meta" in sys.argv:
         mode = "meta"
+    if "--triple" in sys.argv:
+        mode = "triple"
 
-    if mode == "meta":
+    if mode == "triple":
+        train_meta_triple_barrier()
+    elif mode == "meta":
         train_meta()
     else:
         train_primary()
