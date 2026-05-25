@@ -74,9 +74,9 @@ def judge_market_state(index_df):
     # 牛市：趋势向上 + 成交额活跃 + 非高波
     if trend and is_active and not high_vol:
         state, pos_limit = "bull", 0.8
-    # 熊市：趋势向下 + 高波
+    # 熊市：趋势向下 + 高波 → 10%上限防回撤
     elif not trend and high_vol:
-        state, pos_limit = "bear", 0.2
+        state, pos_limit = "bear", 0.1
     else:
         state, pos_limit = "oscillation", 0.4
 

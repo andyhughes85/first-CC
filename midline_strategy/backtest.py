@@ -52,6 +52,13 @@ class Backtest:
         self.lgb_model = None
         self.meta_threshold = meta_threshold
 
+        # 风控状态
+        self._consecutive_losses = 0
+        self._cool_until = None
+        self._prev_state = None
+        self._state_hold_until = None
+        self._state_hold_state = None
+
         # 加载数据（含温漂）
         warmup = timedelta(days=180)
         self._load_data(warmup)
@@ -461,6 +468,16 @@ class Backtest:
         proceeds = pos["shares"] * sell_price * (1 - BT.COMMISSION)
         self.cash += proceeds
         pnl = sell_price / pos["buy_price"] - 1
+
+        # 连亏计数器
+        if pnl <= 0:
+            self._consecutive_losses += 1
+            if self._consecutive_losses >= 3:
+                self._cool_until = date + timedelta(days=5)
+                print(f"  连亏{self._consecutive_losses}笔，冷却至{self._cool_until.date()}")
+        else:
+            self._consecutive_losses = 0
+
         self.trades.append({
             "code": code,
             "name": pos.get("name", ""),
@@ -493,11 +510,26 @@ class Backtest:
         return score
 
     def _buy_check(self, date):
+        # 连亏冷却：连续 3 笔亏损后暂停开仓 2 个交易日
+        if self._cool_until and date < self._cool_until:
+            return
+
         market_info = self._get_market_info(date)
         state = market_info["state"]
         pos_limit = market_info["pos_limit"]
         if state == "wait":
             return
+
+        # 状态切换缓冲：状态变更后沿用旧状态的信号规则 3 天，避免反复切换
+        if state != self._prev_state and self._prev_state is not None:
+            self._state_hold_until = date + timedelta(days=4)
+            self._state_hold_state = self._prev_state
+        if self._state_hold_until and date < self._state_hold_until:
+            state = self._state_hold_state  # 沿用旧状态过滤信号
+        else:
+            self._state_hold_until = None
+            self._state_hold_state = None
+        self._prev_state = market_info["state"]
 
         target = self._sig_by_date.get(date, pd.DataFrame()).copy()
         if target.empty:
