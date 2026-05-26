@@ -177,8 +177,30 @@ def daily_job(status=None):
         index_df = add_index_indicators(index_df)
         market_info = judge_market_state(index_df)
         ms, pos = market_info["state"], market_info["pos_limit"]
+
+        # HMM 状态作为第二意见，分歧时取保守仓位
+        hmm_label, hmm_probs = _ensure_hmm(index_df)
+        if hmm_label:
+            hmm_pos = {"bull": 0.8, "oscillation": 0.4, "bear": 0.1}.get(hmm_label, 0.4)
+            hmm_conf = max(hmm_probs.values()) if hmm_probs else 0
+            if ms == hmm_label:
+                logging.info("HMM与MA状态一致: %s (HMM置信度%.0f%%)", ms, hmm_conf * 100)
+            else:
+                blended = min(pos, hmm_pos)
+                logging.info("HMM与MA分歧: MA=%s HMM=%s(%.0f%%), 仓位%.0f%%→%.0f%%",
+                             ms, hmm_label, hmm_conf * 100, pos * 100, blended * 100)
+                pos = blended
+                market_info["pos_limit"] = blended
+            market_info["hmm_state"] = hmm_label
+            market_info["hmm_probs"] = hmm_probs
+            market_info["trend_detail"] += f" | HMM:{hmm_label}({hmm_conf:.0%})"
+
         _status_update(status, f"📊 市场状态: {ms} 仓位≤{pos:.0%}")
-        logging.info("市场状态: %s, 仓位上限: %.0f%%", ms, pos * 100)
+        hmm_log = ""
+        if hmm_label and hmm_probs:
+            prob_str = " ".join(f"{k}={v:.0%}" for k, v in hmm_probs.items())
+            hmm_log = f" | HMM:{hmm_label} [{prob_str}]"
+        logging.info("市场状态: %s, 仓位上限: %.0f%%%s", ms, pos * 100, hmm_log)
 
         # 个股数据（从缓存读取，不触发在线下载，避免超时）
         _status_update(status, "💾 加载个股缓存数据...")
