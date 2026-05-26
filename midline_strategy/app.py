@@ -109,7 +109,7 @@ with st.sidebar:
 
     col1, col2 = st.columns(2)
     with col1:
-        btn_label = "▶ 跑策略" if not already_ran_today else "▶ 重新执行"
+        btn_label = "▶ 跑策略" if not already_ran_today else "▶ 执行"
         btn_disabled = _daily_job is None
         if st.button(btn_label, width="stretch", disabled=btn_disabled):
             with st.status("策略执行中...", expanded=True) as _status:
