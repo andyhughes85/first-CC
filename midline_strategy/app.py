@@ -86,8 +86,11 @@ with st.sidebar:
         if st.button(btn_label, width="stretch"):
             with st.status("策略执行中...", expanded=True) as _status:
                 try:
+                    _t0 = datetime.now()
                     _daily_job(_status)
-                    _status.update(label="✅ 策略执行完成", state="complete")
+                    _t1 = datetime.now()
+                    st.session_state["last_run_duration"] = (_t1 - _t0).total_seconds()
+                    _status.update(label=f"✅ 策略执行完成（{(_t1-_t0).total_seconds():.1f}s）", state="complete")
                 except Exception as e:
                     _status.update(label=f"❌ {e}", state="error")
             st.rerun()
@@ -97,6 +100,9 @@ with st.sidebar:
 
     if already_ran_today:
         st.caption(f"✅ 今日已运行  {state_emoji}{state_str or ''}")
+        last_dur = st.session_state.get("last_run_duration")
+        if last_dur:
+            st.caption(f"⏱ 上次耗时 {last_dur:.1f}s")
     else:
         st.caption("⏳ 今日尚未运行")
 
