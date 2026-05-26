@@ -144,9 +144,9 @@ with st.sidebar:
     if cl >= 3: st.warning(f"⚠️ 连亏{cl}次")
 
 # ── Tab布局 ──
-tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(["📖 策略说明", "📊 仪表盘", "💼 持仓", "📋 交易记录", "📰 要闻精选", "📈 回测"])
+tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 仪表盘", "💼 持仓", "📋 交易记录", "📰 要闻精选", "📈 回测", "📖 AI选股策略说明"])
 
-with tab0:
+with tab5:
     st.title("中线波段策略系统 v3.1")
 
     st.markdown("""
@@ -235,7 +235,7 @@ with tab0:
     | 定时任务 | schedule 库 |
     """)
 
-with tab1:
+with tab0:
     # KPI
     bc = state if state in ("bull","bear","oscillation") else "wait"
     cols = st.columns(5)
@@ -286,7 +286,7 @@ with tab1:
         st.dataframe(d,width="stretch",hide_index=True)
     else: st.info("暂无信号记录")
 
-with tab2:
+with tab1:
     st.subheader("持仓明细")
     if not positions.empty:
         d = positions[["code","name","entry_date","entry_price","current_price",
@@ -308,7 +308,7 @@ with tab2:
                     st.rerun()
     else: st.info("暂无持仓")
 
-with tab3:
+with tab2:
     st.subheader("交易记录")
     if not trades.empty:
         col1,col2 = st.columns(2)
@@ -326,32 +326,97 @@ with tab3:
 
         sells = trades[trades["action"]=="sell"].copy()
         if not sells.empty:
-            st.subheader("绩效统计")
-            kcols = st.columns(5)
-            wins = sells[sells["pnl"]>0]; losses = sells[sells["pnl"]<=0]
-            aw = wins["pnl_pct"].mean()*100 if not wins.empty else 0
-            al = losses["pnl_pct"].mean()*100 if not losses.empty else 0
-            kcols[0].metric("总交易",len(sells))
-            kcols[1].metric("胜率",f"{len(wins)/len(sells)*100:.1f}%")
-            kcols[2].metric("平均盈利",f"{aw:.2f}%")
-            kcols[3].metric("平均亏损",f"{al:.2f}%")
-            kcols[4].metric("盈亏比",f"{abs(aw/al):.2f}" if al!=0 else "∞")
-
             sells["date"] = pd.to_datetime(sells["date"])
+            sells["pnl_val"] = pd.to_numeric(sells["pnl"], errors="coerce").fillna(0)
+            sells["pnl_pct_val"] = pd.to_numeric(sells["pnl_pct"], errors="coerce").fillna(0)
+            wins = sells[sells["pnl_val"]>0]; losses = sells[sells["pnl_val"]<=0]
+            aw = wins["pnl_pct_val"].mean()*100 if not wins.empty else 0
+            al = losses["pnl_pct_val"].mean()*100 if not losses.empty else 0
+
+            st.subheader("绩效概览")
+            kcols = st.columns(6)
+            kcols[0].metric("总交易", len(sells))
+            kcols[1].metric("胜率", f"{len(wins)/len(sells)*100:.1f}%")
+            kcols[2].metric("平均盈利", f"{aw:.2f}%")
+            kcols[3].metric("平均亏损", f"{al:.2f}%")
+            kcols[4].metric("盈亏比", f"{abs(aw/al):.2f}" if al!=0 else "∞")
+            kcols[5].metric("累计盈亏", f"¥{sells['pnl_val'].sum():+,.0f}")
+
+            # ---- 累计权益曲线 ----
+            sells_sorted = sells.sort_values("date")
+            sells_sorted["cum_pnl"] = sells_sorted["pnl_val"].cumsum()
+            st.subheader("累计盈亏曲线")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=sells_sorted["date"], y=sells_sorted["cum_pnl"],
+                mode="lines+markers", name="累计盈亏",
+                line=dict(color="#00C853",width=2),
+                fill="tozeroy", fillcolor="rgba(0,200,83,0.08)"))
+            fig.add_hline(y=0, line_dash="dash", line_color="#888", opacity=0.5)
+            fig.update_layout(height=280, margin=dict(l=0,r=0,t=0,b=0),
+                plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                font=dict(color="#FAFAFA"), hovermode="x unified",
+                xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#2E3138"))
+            st.plotly_chart(fig, width="stretch")
+
+            # ---- 月度收益 ----
             sells["ym"] = sells["date"].dt.strftime("%Y-%m")
-            monthly = sells.groupby("ym")["pnl_pct"].sum()*100
-            if len(monthly)>1:
-                fig = px.bar(x=monthly.index,y=monthly.values,color=monthly.values,
+            monthly = sells.groupby("ym")["pnl_val"].sum()
+            if len(monthly) > 1:
+                st.subheader("月度收益")
+                fig = px.bar(x=monthly.index, y=monthly.values,
+                    color=monthly.values,
                     color_continuous_scale=["#FF1744","#FFD600","#00C853"],
-                    labels={"x":"","y":"月收益%"},height=250)
-                fig.update_layout(plot_bgcolor="#0E1117",paper_bgcolor="#0E1117",
-                    font=dict(color="#FAFAFA"),showlegend=False,
-                    xaxis=dict(showgrid=False),yaxis=dict(showgrid=True,gridcolor="#2E3138"),
+                    labels={"x":"","y":"盈亏(¥)"}, height=220)
+                fig.update_layout(plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                    font=dict(color="#FAFAFA"), showlegend=False,
+                    xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#2E3138"),
                     margin=dict(l=0,r=0,t=0,b=0))
-                st.plotly_chart(fig,width="stretch")
+                st.plotly_chart(fig, width="stretch")
+
+            # ---- 持有天数分布 ----
+            if "hold_days" in sells.columns:
+                st.subheader("持仓天数分布")
+                hd = sells["hold_days"].dropna()
+                if not hd.empty:
+                    fig = px.histogram(x=hd, nbins=20, labels={"x":"持有天数","y":"笔数"},
+                        color_discrete_sequence=["#00C853"])
+                    fig.update_layout(height=220, plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                        font=dict(color="#FAFAFA"), showlegend=False,
+                        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#2E3138"),
+                        margin=dict(l=0,r=0,t=0,b=0))
+                    st.plotly_chart(fig, width="stretch")
+
+            # ---- 出场原因分析 ----
+            if "reason" in sells.columns:
+                st.subheader("出场原因分析")
+                reason_stats = sells.groupby("reason").agg(
+                    笔数=("pnl_val","count"),
+                    胜率=("pnl_val", lambda x: (x>0).mean()*100),
+                    平均盈亏=("pnl_val", "mean"),
+                ).round(2).sort_values("笔数", ascending=False)
+                reason_stats["平均盈亏"] = reason_stats["平均盈亏"].apply(lambda x: f"¥{x:+,.0f}")
+                st.dataframe(reason_stats, width="stretch")
+
+            # ---- 最佳/最差交易 ----
+            st.subheader("最佳交易 Top5")
+            best = sells.nlargest(5, "pnl_val")[["date","code","name","pnl_val","pnl_pct_val","reason","hold_days"]]
+            best.columns = ["日期","代码","名称","盈亏(¥)","盈亏%","原因","持有天数"]
+            best["盈亏(¥)"] = best["盈亏(¥)"].apply(lambda x: f"¥{x:+,.0f}")
+            best["盈亏%"] = best["盈亏%"].apply(lambda x: f"{x:+.2%}")
+            st.dataframe(best, width="stretch", hide_index=True)
+
+            st.subheader("最差交易 Top5")
+            worst = sells.nsmallest(5, "pnl_val")[["date","code","name","pnl_val","pnl_pct_val","reason","hold_days"]]
+            worst.columns = ["日期","代码","名称","盈亏(¥)","盈亏%","原因","持有天数"]
+            worst["盈亏(¥)"] = worst["盈亏(¥)"].apply(lambda x: f"¥{x:+,.0f}")
+            worst["盈亏%"] = worst["盈亏%"].apply(lambda x: f"{x:+.2%}")
+            st.dataframe(worst, width="stretch", hide_index=True)
+
+        else:
+            st.info("暂无已平仓交易记录")
     else: st.info("暂无交易记录")
 
-with tab4:
+with tab3:
     st.subheader("精选个股日报")
     if not signals_df.empty:
         for _, row in signals_df.head(8).iterrows():
@@ -400,7 +465,7 @@ def _load_backtest():
     tr = pd.read_csv(tr_file, parse_dates=["buy_date","sell_date"]) if os.path.exists(tr_file) else pd.DataFrame()
     return eq, sm, tr
 
-with tab5:
+with tab4:
     bt_eq, bt_sm, bt_tr = _load_backtest()
     if not bt_sm:
         st.info("未发现回测数据，请先运行 `python backtest.py`")
