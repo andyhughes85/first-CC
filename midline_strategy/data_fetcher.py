@@ -15,8 +15,8 @@ from config import DB_PATH, INDEX_CODE, START_DATE, POOL_MIN_AMOUNT
 from utils import is_trade_day
 
 # ==================== 全局限流 ====================
-REQUEST_COUNTER = {"sina": 0, "baostock": 0}
-DAILY_LIMIT = 500
+REQUEST_COUNTER = {"sina": 0, "baostock": 0, "em": 0}
+DAILY_LIMIT = 2000
 _REQUEST_LOCK = threading.Lock()
 
 
@@ -55,7 +55,7 @@ def retry_backoff(max_tries=3, base_delay=3):
 
 def reset_daily_counters():
     REQUEST_COUNTER.clear()
-    REQUEST_COUNTER.update({"sina": 0, "baostock": 0})
+    REQUEST_COUNTER.update({"sina": 0, "baostock": 0, "em": 0})
     logging.info("日请求计数器已重置")
 
 
@@ -335,6 +335,17 @@ def _fetch_idx_baostock(start, end):
         bs.logout()
 
 
+@retry_backoff(max_tries=2)
+@rate_limited("em")
+def _fetch_idx_em():
+    """东财指数日线（稳定备源，拉全量后按需裁剪）"""
+    df = ak.stock_zh_index_daily_em(symbol=f"sh{INDEX_CODE}")
+    df["date"] = pd.to_datetime(df["date"])
+    df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0).astype(int)
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+    return df[["date", "open", "high", "low", "close", "volume", "amount"]]
+
+
 def fetch_index_incremental():
     today = datetime.now().strftime("%Y-%m-%d")
     cached = load_cached("index_daily")
@@ -350,7 +361,8 @@ def fetch_index_incremental():
         start = datetime.strptime(START_DATE, "%Y%m%d").strftime("%Y-%m-%d")
         logging.info("首次拉取指数: %s ~ %s", start, today)
 
-    for name, fn in [("新浪", _fetch_idx_sina), ("BaoStock", lambda: _fetch_idx_baostock(start, today))]:
+    for name, fn in [("新浪", _fetch_idx_sina), ("东财", _fetch_idx_em),
+                      ("BaoStock", lambda: _fetch_idx_baostock(start, today))]:
         try:
             df = fn()
             if df is not None and not df.empty:
@@ -381,6 +393,24 @@ def _fetch_stock_sina(code, start_str, end_str):
     df["date"] = pd.to_datetime(df["date"])
     df["code"] = code
     return df[["code", "date", "open", "high", "low", "close", "volume", "amount"]]
+
+
+@rate_limited("em")
+def _fetch_stock_em(code, start_str, end_str):
+    """东财个股日线（稳定备源）"""
+    try:
+        df = ak.stock_zh_a_hist(symbol=code, period="daily",
+                                start_date=start_str.replace("-", ""),
+                                end_date=end_str.replace("-", ""), adjust="qfq")
+        if df is None or df.empty:
+            return None
+        df["date"] = pd.to_datetime(df["日期"])
+        df["code"] = code
+        df.rename(columns={"开盘": "open", "收盘": "close", "最高": "high",
+                           "最低": "low", "成交量": "volume", "成交额": "amount"}, inplace=True)
+        return df[["code", "date", "open", "high", "low", "close", "volume", "amount"]]
+    except Exception:
+        return None
 
 
 @retry_backoff(max_tries=2)
@@ -416,6 +446,8 @@ def download_stock_history(code, days=60):
     end_str = end.strftime("%Y-%m-%d")
 
     df = _fetch_stock_sina(code, start_str, end_str)
+    if df is None or df.empty:
+        df = _fetch_stock_em(code, start_str, end_str)
     if df is None or df.empty:
         df = _fetch_stock_bs(code, start_str, end_str)
     if df is None or df.empty:
@@ -532,8 +564,10 @@ def update_stock_data_daily(pool_codes, lookback_days=120, max_workers=5):
         saved = 0
 
         def _fetch_one(code):
-            """Sina → BaoStock 双源降级"""
+            """Sina → 东财 → BaoStock 三源降级"""
             df = _fetch_stock_sina(code, today, today)
+            if df is None or df.empty:
+                df = _fetch_stock_em(code, today, today)
             if df is None or df.empty:
                 df = _fetch_stock_bs(code, today, today)
             return df
