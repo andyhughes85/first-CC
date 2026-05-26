@@ -144,7 +144,7 @@ with st.sidebar:
     if cl >= 3: st.warning(f"⚠️ 连亏{cl}次")
 
 # ── Tab布局 ──
-tab0, tab1, tab2, tab3, tab4 = st.tabs(["📖 策略说明", "📊 仪表盘", "💼 持仓", "📋 交易记录", "📰 要闻精选"])
+tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(["📖 策略说明", "📊 仪表盘", "💼 持仓", "📋 交易记录", "📰 要闻精选", "📈 回测"])
 
 with tab0:
     st.title("中线波段策略系统 v3.1")
@@ -384,3 +384,93 @@ with tab4:
     st.subheader("系统参数")
     st.caption(f"初始资金: ¥1,000,000 | 单股上限: 10% | 最大持仓: 10只")
     st.caption(f"止损: -7% | 时间止损: 15天 | 现金: ¥{summary.get('cash',0):,.2f}")
+
+# ── 回测数据加载 ──
+import json as _json
+
+_BT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@st.cache_data(ttl=60)
+def _load_backtest():
+    eq_file = os.path.join(_BT_DIR, "backtest_equity.csv")
+    sm_file = os.path.join(_BT_DIR, "backtest_summary.json")
+    tr_file = os.path.join(_BT_DIR, "backtest_trades.csv")
+    eq = pd.read_csv(eq_file, parse_dates=["date"]) if os.path.exists(eq_file) else pd.DataFrame()
+    sm = _json.load(open(sm_file)) if os.path.exists(sm_file) else {}
+    tr = pd.read_csv(tr_file, parse_dates=["buy_date","sell_date"]) if os.path.exists(tr_file) else pd.DataFrame()
+    return eq, sm, tr
+
+with tab5:
+    bt_eq, bt_sm, bt_tr = _load_backtest()
+    if not bt_sm:
+        st.info("未发现回测数据，请先运行 `python backtest.py`")
+    else:
+        # KPI 行
+        st.subheader("回测绩效（2018-2025）")
+        k = st.columns(7)
+        k[0].metric("年化收益", f"{bt_sm.get('annual_return',0)*100:.2f}%")
+        k[1].metric("最大回撤", f"{bt_sm.get('max_drawdown',0)*100:.2f}%")
+        k[2].metric("夏普比率", f"{bt_sm.get('sharpe',0):.2f}")
+        k[3].metric("胜率", f"{bt_sm.get('win_rate',0)*100:.1f}%")
+        k[4].metric("总交易", bt_sm.get("n_trades",0))
+        k[5].metric("总收益", f"{bt_sm.get('total_return',0)*100:.2f}%")
+        avg_win = bt_sm.get("avg_win",0)*100
+        avg_loss = abs(bt_sm.get("avg_loss",0)*100)
+        k[6].metric("盈亏比", f"{avg_win/avg_loss:.2f}" if avg_loss else "N/A")
+
+        # 权益曲线
+        if not bt_eq.empty:
+            st.subheader("权益曲线")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=bt_eq["date"], y=bt_eq["value"], mode="lines",
+                name="权益", line=dict(color="#00C853",width=2),
+                fill="tozeroy", fillcolor="rgba(0,200,83,0.08)"))
+            # 基准线
+            init = bt_eq["value"].iloc[0] if not bt_eq.empty else 1e6
+            fig.add_hline(y=init, line_dash="dash", line_color="#888", opacity=0.5)
+            fig.update_layout(height=350, margin=dict(l=0,r=0,t=0,b=0),
+                plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                font=dict(color="#FAFAFA"), hovermode="x unified",
+                xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#2E3138"))
+            st.plotly_chart(fig, width="stretch")
+
+        # 交易分析
+        if not bt_tr.empty:
+            st.subheader("交易分析")
+            # 盈亏分布
+            bt_tr["pnl_pct"] = pd.to_numeric(bt_tr["pnl"], errors="coerce")
+            wins = bt_tr[bt_tr["pnl_pct"] > 0]
+            losses = bt_tr[bt_tr["pnl_pct"] <= 0]
+            c1, c2 = st.columns(2)
+            with c1:
+                fig = go.Figure()
+                fig.add_trace(go.Histogram(x=wins["pnl_pct"], nbinsx=30, name="盈利",
+                    marker_color="#00C853", opacity=0.7))
+                fig.add_trace(go.Histogram(x=losses["pnl_pct"], nbinsx=30, name="亏损",
+                    marker_color="#FF1744", opacity=0.7))
+                fig.update_layout(title="盈亏分布", barmode="overlay", height=280,
+                    plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                    font=dict(color="#FAFAFA"), showlegend=True,
+                    xaxis=dict(showgrid=False, title="收益率"),
+                    yaxis=dict(showgrid=True, gridcolor="#2E3138", title="笔数"))
+                st.plotly_chart(fig, width="stretch")
+            with c2:
+                bt_tr["year"] = bt_tr["buy_date"].dt.year
+                monthly = bt_tr.groupby(bt_tr["buy_date"].dt.to_period("M"))["pnl_pct"].sum()
+                if len(monthly) > 1:
+                    fig = px.bar(x=monthly.index.astype(str), y=monthly.values,
+                        color=monthly.values,
+                        color_continuous_scale=["#FF1744","#FFD600","#00C853"],
+                        labels={"x":"","y":"月收益%"}, height=280)
+                    fig.update_layout(plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+                        font=dict(color="#FAFAFA"), showlegend=False,
+                        xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#2E3138"),
+                        margin=dict(l=0,r=0,t=0,b=0))
+                    st.plotly_chart(fig, width="stretch")
+
+            # 年度收益表
+            st.subheader("年度收益")
+            yearly = bt_tr.groupby("year")["pnl_pct"].sum()
+            ycols = st.columns(len(yearly))
+            for i, (y, v) in enumerate(yearly.items()):
+                ycols[i].metric(f"{int(y)}年", f"{v*100:+.1f}%")
