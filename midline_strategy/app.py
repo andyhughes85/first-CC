@@ -32,22 +32,41 @@ div[data-testid="stMetric"] label { color: #888; font-size: 0.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── 引擎初始化 ──
-# 缓存 pipeline 模块（含 LGB 模型），避免每次点击重复加载
+# ── 引擎初始化（容错）──
 @st.cache_resource
 def _init_engine():
     from pipeline import daily_job, get_last_run_info, lgb_warmup
-    lgb_warmup()  # 预热 LGB 模型到内存（首次约25s，后续 rerun 复用缓存）
+    lgb_warmup()  # 预热 LGB 模型（无模型文件时静默失败）
     return daily_job, get_last_run_info
 
-_daily_job, _get_last_run_info = _init_engine()
+_daily_job, _get_last_run_info = None, None
+try:
+    _daily_job, _get_last_run_info = _init_engine()
+except Exception:
+    pass
 
-# ── 数据加载 ──
-from paper_trader import PaperTrader
+
+def _safe_last_run():
+    """安全包装 _get_last_run_info，首次部署/空表时返回 None"""
+    if _get_last_run_info is None:
+        return None
+    try:
+        return _get_last_run_info()
+    except Exception:
+        return None
+
+
+# ── 数据加载（容错）──
 from market_state import judge_market_state, add_index_indicators
 from data_fetcher import fetch_index_incremental
 
-_trader = PaperTrader()
+_trader = None
+try:
+    from paper_trader import PaperTrader
+    _trader = PaperTrader()
+except Exception:
+    pass
+
 market = {"state":"wait","pos_limit":0,"index_close":0,"index_pct":0,"trend_detail":"未获取"}
 try:
     idx = fetch_index_incremental()
@@ -56,12 +75,20 @@ try:
         market = judge_market_state(idx)
 except: pass
 
-positions = _trader.get_positions()
-trades = _trader.get_trades()
-equity = _trader.get_equity_curve()
-summary = _trader.get_summary()
-try: signals_df = _trader.get_today_signals()
-except: signals_df = pd.DataFrame()
+positions = trades = equity = pd.DataFrame()
+summary = {"position_count":0,"total_trades":0,"total_pnl_pct":0,"cash":0,"consecutive_losses":0}
+signals_df = pd.DataFrame()
+if _trader:
+    try: positions = _trader.get_positions()
+    except: pass
+    try: trades = _trader.get_trades()
+    except: pass
+    try: equity = _trader.get_equity_curve()
+    except: pass
+    try: summary = _trader.get_summary()
+    except: pass
+    try: signals_df = _trader.get_today_signals()
+    except: pass
 
 state = market.get("state","wait")
 pos_limit = market.get("pos_limit",0)
@@ -74,7 +101,7 @@ with st.sidebar:
     st.subheader("系统状态")
     st.caption(f"{now.strftime('%Y-%m-%d %H:%M')}")
 
-    last_run = _get_last_run_info()
+    last_run = _safe_last_run()
     today_str = now.strftime("%Y-%m-%d")
     already_ran_today = last_run and last_run[0] == today_str
     state_str = last_run[1] if already_ran_today else None
@@ -83,7 +110,8 @@ with st.sidebar:
     col1, col2 = st.columns(2)
     with col1:
         btn_label = "▶ 跑策略" if not already_ran_today else "▶ 重新执行"
-        if st.button(btn_label, width="stretch"):
+        btn_disabled = _daily_job is None
+        if st.button(btn_label, width="stretch", disabled=btn_disabled):
             with st.status("策略执行中...", expanded=True) as _status:
                 try:
                     _t0 = datetime.now()
@@ -94,6 +122,8 @@ with st.sidebar:
                 except Exception as e:
                     _status.update(label=f"❌ {e}", state="error")
             st.rerun()
+        if _daily_job is None:
+            st.caption("⚠️ 引擎未初始化，请检查日志后重启")
     with col2:
         if st.button("🔄 刷新", width="stretch"):
             st.rerun()
