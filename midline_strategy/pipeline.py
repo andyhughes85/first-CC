@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import os
 from datetime import datetime, timedelta
-from data_fetcher import fetch_daily_data, save_market_state, load_cached
+from data_fetcher import fetch_index_incremental, save_market_state, load_cached, get_conn as _get_conn
 from market_state import judge_market_state, add_index_indicators
 from signal_engine import generate_signals
 from push_service import send, send_test, send_daily_report, send_weekly_report
@@ -82,6 +82,23 @@ def _load_lgb_model():
         os.chdir(old_cwd)
 
 
+def lgb_warmup():
+    """预加载 LGB 模型（供 UI 启动时预热调用），避免首次执行耗时"""
+    return _load_lgb_model()
+
+
+def get_last_run_info():
+    """查询策略最后运行日期和状态"""
+    try:
+        conn = _get_conn()
+        cur = conn.execute("SELECT date, state FROM market_state_history ORDER BY date DESC LIMIT 1")
+        row = cur.fetchone()
+        conn.close()
+        return row if row else None
+    except Exception:
+        return None
+
+
 def _lgb_rerank(signals, stocks_df):
     """用 LightGBM 模型对信号重排序"""
     model = _load_lgb_model()
@@ -141,21 +158,31 @@ def daily_job():
 
     logging.info("开始日线任务")
     try:
-        data = fetch_daily_data()
-        if data is None or data["index"].empty:
-            logging.warning("数据获取失败，退出")
+        # 指数数据（轻量，可在线获取）
+        index_df = fetch_index_incremental()
+        if index_df is None or index_df.empty:
+            logging.error("指数数据获取失败")
             return
-
-        index_df = data["index"].copy()
         index_df = add_index_indicators(index_df)
         market_info = judge_market_state(index_df)
         ms, pos = market_info["state"], market_info["pos_limit"]
         logging.info("市场状态: %s, 仓位上限: %.0f%%", ms, pos * 100)
 
-        hot = get_hot_industries(data.get("stocks", pd.DataFrame()))
+        # 个股数据（从缓存读取，不触发在线下载，避免超时）
+        stocks_df = load_cached("stock_daily",
+            start=(datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d"))
+        if not stocks_df.empty:
+            try:
+                stock_list = pd.read_sql("SELECT code, name, industry FROM stock_list", _get_conn())
+                stocks_df = stocks_df.merge(stock_list[["code","name","industry"]], on="code", how="left")
+            except Exception as e:
+                logging.warning("行业信息加载失败: %s", e)
+        logging.info("个股缓存数据: %d 条, %d 只", len(stocks_df),
+                     stocks_df["code"].nunique() if not stocks_df.empty else 0)
+
+        hot = get_hot_industries(stocks_df)
         logging.info("强势行业: %s", hot)
 
-        stocks_df = data.get("stocks", pd.DataFrame())
         signals, filter_stats = generate_signals(stocks_df, hot, ms)
         signals = _lgb_rerank(signals, stocks_df)
 

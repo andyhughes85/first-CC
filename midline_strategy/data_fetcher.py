@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import akshare as ak
 
-from config import DB_PATH, INDEX_CODE, START_DATE
+from config import DB_PATH, INDEX_CODE, START_DATE, POOL_MIN_AMOUNT
 from utils import is_trade_day
 
 # ==================== 全局限流 ====================
@@ -221,8 +221,10 @@ def get_stock_list():
 # ==================== 交易池（沪深300，缓存到数据库）====================
 
 def _clean_pool_df(df, code_col, name_col):
-    """清洗交易池DataFrame：提取代码、去ST、去重"""
-    result = df[[code_col, name_col]].copy()
+    """清洗交易池DataFrame：提取代码、去ST、去重，保留成交额用于后续过滤"""
+    extra_cols = ['成交额'] if '成交额' in df.columns else []
+    keep_cols = [code_col, name_col] + extra_cols
+    result = df[keep_cols].copy()
     result.rename(columns={code_col: 'code', name_col: 'name'}, inplace=True)
     result['code'] = result['code'].str.extract(r'(\d{6})', expand=False)
     result.dropna(subset=['code'], inplace=True)
@@ -241,24 +243,41 @@ def _save_pool_df(spot_df):
     logging.info("交易池更新完成，全市场股票数量: %d", len(spot_df))
 
 
+def _filter_pool_by_amount(spot_df):
+    """按成交额过滤交易池，剔除僵尸股/微盘股"""
+    if POOL_MIN_AMOUNT <= 0 or '成交额' not in spot_df.columns:
+        return spot_df[['code', 'name']]
+
+    spot_df = spot_df.copy()
+    spot_df['成交额'] = pd.to_numeric(spot_df['成交额'], errors='coerce').fillna(0)
+    before = len(spot_df)
+    spot_df = spot_df[spot_df['成交额'] >= POOL_MIN_AMOUNT]
+    after = len(spot_df)
+    logging.info("交易池成交额过滤(>=%.0f万): %d → %d (剔除 %d 只)",
+                 POOL_MIN_AMOUNT / 1e4, before, after, before - after)
+    return spot_df[['code', 'name']]
+
+
 def refresh_trading_pool():
     """多数据源刷新交易池：新浪→东财→降级缓存"""
     logging.info("刷新全市场交易池...")
 
-    # 尝试1：新浪实时快照
+    # 尝试1：新浪实时快照（含成交额，可过滤僵尸股）
     try:
         spot_df = ak.stock_zh_a_spot()
         spot_df = _clean_pool_df(spot_df, '代码', '名称')
+        spot_df = _filter_pool_by_amount(spot_df)
         _save_pool_df(spot_df)
         logging.info("新浪源刷新成功")
         return spot_df
     except Exception as e:
         logging.warning("新浪源失败: %s", e)
 
-    # 尝试2：东财快照（备选）
+    # 尝试2：东财快照（备选，含总市值+成交额）
     try:
         spot_df = ak.stock_zh_a_spot_em()
         spot_df = _clean_pool_df(spot_df, '代码', '名称')
+        spot_df = _filter_pool_by_amount(spot_df)
         _save_pool_df(spot_df)
         logging.info("东财源刷新成功")
         return spot_df

@@ -447,6 +447,7 @@ class PaperTrader:
             "total_pnl": round(sells["pnl"].sum(), 2) if not sells.empty else 0,
             "total_pnl_pct": round((sells["pnl"].sum() / self.initial_capital) * 100, 2) if not sells.empty else 0,
             "cash": round(self.cash, 2),
+            "consecutive_losses": self._consecutive_losses,
         }
         if not sells.empty:
             summary["avg_win"] = round(wins["pnl_pct"].mean() * 100, 2) if not wins.empty else 0

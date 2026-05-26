@@ -24,3 +24,18 @@ quote_image.png
 pomodoro_config.json
 pomodoro_stats.json
 pomodoro_tasks.json
+
+# Backtest outputs (generated)
+backtest_*.csv
+backtest_summary.json
+*_integration_report.md
+
+# Temporary analysis scripts
+_analyze_trades.py
+bench_*.py
+extract_*.py
+extract_pdf.py
+*全文.txt
+
+# Generated equity curve
+equity_*.csv

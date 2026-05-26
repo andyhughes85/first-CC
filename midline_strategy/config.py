@@ -30,6 +30,9 @@ STOP_LOSS = -0.07               # 止损线
 TAKE_PROFIT = 0.10              # 止盈线
 TIME_STOP_DAYS = 15             # 时间止损天数
 
+# ================== 股票池过滤 ==================
+POOL_MIN_AMOUNT = 50_000_000  # 最低成交额（元），剔除僵尸股/微盘股
+
 # ================== 行业 ==================
 TOP_INDUSTRIES_N = 5
 INDUSTRY_MOMENTUM_DAYS = 20
