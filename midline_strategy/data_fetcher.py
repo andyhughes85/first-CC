@@ -261,7 +261,7 @@ def _filter_pool_by_amount(spot_df):
     return spot_df[['code', 'name']]
 
 
-def refresh_trading_pool():
+def refresh_trading_pool(_recursing=False):
     """多数据源刷新交易池：新浪→东财→降级缓存"""
     logging.info("刷新全市场交易池...")
 
@@ -287,18 +287,21 @@ def refresh_trading_pool():
     except Exception as e:
         logging.warning("东财源也失败: %s", e)
 
-    # 最终降级：使用缓存
+    # 最终降级：使用缓存（防止递归）
+    if _recursing:
+        logging.error("所有源失败且缓存为空，返回空交易池")
+        return pd.DataFrame(columns=["code", "name"])
     logging.warning("所有在线源失败，使用缓存交易池")
-    return get_trading_pool()
+    return get_trading_pool(force_refresh=True)
 
 
-def get_trading_pool():
+def get_trading_pool(force_refresh=False):
     """从缓存获取交易池（返回DataFrame）"""
     conn = get_conn()
     df = pd.read_sql("SELECT code, name FROM trading_pool ORDER BY code", conn)
     conn.close()
-    if df.empty:
-        return refresh_trading_pool()
+    if df.empty and not force_refresh:
+        return refresh_trading_pool(_recursing=True)
     return df
 
 

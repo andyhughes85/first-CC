@@ -47,6 +47,13 @@ def _short_ind(name):
 
 
 def run():
+    try:
+        _run()
+    except Exception as e:
+        log.error("盘中预警异常: %s", e, exc_info=True)
+
+
+def _run():
     import akshare as ak
 
     log.info("盘中预警: 获取全市场实时行情...")

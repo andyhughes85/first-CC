@@ -16,21 +16,27 @@ log = logging.getLogger("scheduler")
 
 
 def job():
-    now = datetime.now()
-    if not is_trade_day(now):
-        log.info("非交易日，跳过定时执行")
-        return
-    log.info("定时任务触发")
-    daily_job()
-    log.info("定时任务完成")
+    try:
+        now = datetime.now()
+        if not is_trade_day(now):
+            log.info("非交易日，跳过定时执行")
+            return
+        log.info("定时任务触发")
+        daily_job()
+        log.info("定时任务完成")
+    except Exception as e:
+        log.error("定时任务失败: %s", e, exc_info=True)
 
 
 def watch_job():
-    now = datetime.now()
-    if not is_trade_day(now):
-        return
-    log.info("盘中预警触发")
-    intraday_watch()
+    try:
+        now = datetime.now()
+        if not is_trade_day(now):
+            return
+        log.info("盘中预警触发")
+        intraday_watch()
+    except Exception as e:
+        log.error("盘中预警失败: %s", e, exc_info=True)
 
 
 # 盘中预警（交易时段每2小时）
