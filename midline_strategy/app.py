@@ -143,6 +143,26 @@ with st.sidebar:
     cl = summary.get("consecutive_losses",0)
     if cl >= 3: st.warning(f"⚠️ 连亏{cl}次")
 
+    # ── 策略参数设置 ──
+    with st.expander("⚙️ 策略参数", expanded=False):
+        import config as _cfg
+        _ov = {}
+        _ov["STOP_LOSS"] = st.number_input("止损线", value=_cfg.STOP_LOSS*100, step=0.5, format="%.1f") / 100
+        _ov["TAKE_PROFIT"] = st.number_input("止盈线", value=_cfg.TAKE_PROFIT*100, step=0.5, format="%.1f") / 100
+        _ov["TIME_STOP_DAYS"] = st.number_input("时间止损(天)", value=_cfg.TIME_STOP_DAYS, step=1, format="%d")
+        _ov["MAX_POSITION_PER_STOCK"] = st.number_input("单股仓位上限", value=_cfg.MAX_POSITION_PER_STOCK*100, step=1, format="%d") / 100
+        _ov["VOL_RATIO_MIN"] = st.number_input("最低量比", value=_cfg.VOL_RATIO_MIN, step=0.1, format="%.1f")
+        _ov["VOL_RATIO_MAX"] = st.number_input("最高量比", value=_cfg.VOL_RATIO_MAX, step=0.1, format="%.1f")
+        _ov["MAX_DEVIATION"] = st.number_input("最大偏离20日线", value=_cfg.MAX_DEVIATION*100, step=0.5, format="%.1f") / 100
+        _ov["POOL_MIN_AMOUNT"] = int(st.number_input("最低成交额(万)", value=_cfg.POOL_MIN_AMOUNT/1e4, step=1000, format="%d")) * 10000
+        if st.button("💾 保存参数", use_container_width=True):
+            import json
+            with open("config_overrides.json", "w") as _f:
+                json.dump(_ov, _f, indent=2, ensure_ascii=False)
+            st.success("✅ 已保存到 config_overrides.json\n重启 Streamlit 后生效")
+            st.rerun()
+        st.caption("⚠️ 保存后需重启 Streamlit 生效")
+
 # ── Tab布局 ──
 tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 仪表盘", "💼 持仓", "📋 交易记录", "📰 要闻精选", "📈 回测", "📖 AI选股策略说明"])
 
