@@ -32,22 +32,10 @@ div[data-testid="stMetric"] label { color: #888; font-size: 0.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── 引擎初始化（容错）──
-@st.cache_resource
-def _init_engine():
-    from pipeline import daily_job, get_last_run_info, lgb_warmup
-    lgb_warmup()  # 预热 LGB 模型（无模型文件时静默失败）
-    return daily_job, get_last_run_info
-
-_daily_job, _get_last_run_info = None, None
-try:
-    _daily_job, _get_last_run_info = _init_engine()
-except Exception:
-    pass
-
+# ── 引擎函数 ──
+from pipeline import get_last_run_info as _get_last_run_info
 
 def _safe_last_run():
-    """安全包装 _get_last_run_info，首次部署/空表时返回 None"""
     if _get_last_run_info is None:
         return None
     try:
@@ -109,23 +97,20 @@ with st.sidebar:
 
     col1, col2 = st.columns(2)
     with col1:
-        btn_label = "▶ 跑策略" if not already_ran_today else "▶ 执行"
-        btn_disabled = _daily_job is None
-        if st.button(btn_label, width="stretch", disabled=btn_disabled):
+        if st.button("⚡ 手动执行", width="stretch"):
             with st.status("策略执行中...", expanded=True) as _status:
                 try:
+                    from pipeline import daily_job as _run
                     _t0 = datetime.now()
-                    _daily_job(_status)
+                    _run()
                     _t1 = datetime.now()
                     st.session_state["last_run_duration"] = (_t1 - _t0).total_seconds()
                     _status.update(label=f"✅ 策略执行完成（{(_t1-_t0).total_seconds():.1f}s）", state="complete")
                 except Exception as e:
                     _status.update(label=f"❌ {e}", state="error")
             st.rerun()
-        if _daily_job is None:
-            st.caption("⚠️ 引擎未初始化，请检查日志后重启")
     with col2:
-        if st.button("🔄 刷新", width="stretch"):
+        if st.button("🔄 刷新视图", width="stretch"):
             st.rerun()
 
     if already_ran_today:
@@ -135,6 +120,7 @@ with st.sidebar:
             st.caption(f"⏱ 上次耗时 {last_dur:.1f}s")
     else:
         st.caption("⏳ 今日尚未运行")
+    st.caption("🕐 定时: 15:35 / 18:00（交易日）")
 
     st.divider()
     st.caption(f"初始资金: ¥1,000,000")
@@ -150,11 +136,11 @@ with st.sidebar:
         _ov["STOP_LOSS"] = st.number_input("止损线", value=_cfg.STOP_LOSS*100, step=0.5, format="%.1f") / 100
         _ov["TAKE_PROFIT"] = st.number_input("止盈线", value=_cfg.TAKE_PROFIT*100, step=0.5, format="%.1f") / 100
         _ov["TIME_STOP_DAYS"] = st.number_input("时间止损(天)", value=_cfg.TIME_STOP_DAYS, step=1, format="%d")
-        _ov["MAX_POSITION_PER_STOCK"] = st.number_input("单股仓位上限", value=_cfg.MAX_POSITION_PER_STOCK*100, step=1, format="%d") / 100
+        _ov["MAX_POSITION_PER_STOCK"] = st.number_input("单股仓位上限(%)", value=int(_cfg.MAX_POSITION_PER_STOCK*100), step=1, format="%d") / 100
         _ov["VOL_RATIO_MIN"] = st.number_input("最低量比", value=_cfg.VOL_RATIO_MIN, step=0.1, format="%.1f")
         _ov["VOL_RATIO_MAX"] = st.number_input("最高量比", value=_cfg.VOL_RATIO_MAX, step=0.1, format="%.1f")
         _ov["MAX_DEVIATION"] = st.number_input("最大偏离20日线", value=_cfg.MAX_DEVIATION*100, step=0.5, format="%.1f") / 100
-        _ov["POOL_MIN_AMOUNT"] = int(st.number_input("最低成交额(万)", value=_cfg.POOL_MIN_AMOUNT/1e4, step=1000, format="%d")) * 10000
+        _ov["POOL_MIN_AMOUNT"] = int(st.number_input("最低成交额(万)", value=int(_cfg.POOL_MIN_AMOUNT/1e4), step=1000, format="%d")) * 10000
         if st.button("💾 保存参数", use_container_width=True):
             import json
             with open("config_overrides.json", "w") as _f:

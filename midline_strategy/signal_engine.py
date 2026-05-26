@@ -8,6 +8,7 @@ from config import (
     MAX_DEVIATION,
     VOL_RATIO_MIN_BULL,
     VOL_RATIO_MIN_OSC,
+    AMPLITUDE_5D_MIN,
 )
 
 
@@ -78,6 +79,10 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
 
         group["ma_distance"] = (group["ma5"] - group["ma20"]) / group["ma20"]
         group["max_dd_20"] = group["close"] / group["close"].rolling(20).max() - 1
+        # 5日振幅：过滤窄幅震荡的低质量信号
+        group["amplitude_5d"] = (
+            group["high"].rolling(5).max() / group["low"].rolling(5).min() - 1
+        )
         return group
 
     pool = (pool.set_index("code")
@@ -87,8 +92,11 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
 
     required_cols = ["ma5", "ma10", "ma20", "ma60", "vol_ma20",
                      "mom_20", "mom_60", "divergence_bull",
-                     "has_bdr", "has_w", "has_fb"]
+                     "has_bdr", "has_w", "has_fb", "amplitude_5d"]
     pool = pool.dropna(subset=required_cols)
+
+    # 只保留每只股票最新一天数据，避免历史过时价格产生信号
+    pool = pool.sort_values("date").groupby("code", as_index=False).tail(1)
 
     base_pool = len(pool["code"].unique())
     vol_ratio = pool["volume"] / pool["vol_ma20"]
@@ -104,16 +112,17 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
     mask_yang = pool["close"] > pool["open"]
     mask_div = pool["divergence_bull"]
     mask_caisen = (pool["has_bdr"] | pool["has_w"]) & ~pool["has_fb"]
+    mask_amplitude = pool["amplitude_5d"] >= AMPLITUDE_5D_MIN
 
     if market_state == "bull":
         mask_vol = (vol_ratio >= VOL_RATIO_MIN_BULL) & (vol_ratio <= VOL_RATIO_MAX)
-        final_mask = mask_trend & mask_vol & mask_dev & mask_yang
+        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_amplitude
     elif market_state == "bear":
         mask_vol_bear = vol_ratio > 2.5
-        final_mask = mask_trend & mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen
+        final_mask = mask_trend & mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen & mask_amplitude
     else:
         mask_vol = (vol_ratio >= VOL_RATIO_MIN_OSC) & (vol_ratio <= VOL_RATIO_MAX)
-        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_div
+        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_div & mask_amplitude
 
     signals = pool[final_mask].copy()
     if signals.empty:

@@ -183,7 +183,7 @@ def daily_job(status=None):
         # 个股数据（从缓存读取，不触发在线下载，避免超时）
         _status_update(status, "💾 加载个股缓存数据...")
         stocks_df = load_cached("stock_daily",
-            start=(datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d"))
+            start=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"))
         if not stocks_df.empty:
             try:
                 stock_list = pd.read_sql("SELECT code, name, industry FROM stock_list", _get_conn())

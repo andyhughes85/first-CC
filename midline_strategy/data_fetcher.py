@@ -11,6 +11,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 import akshare as ak
 
+# 屏蔽 akshare 内部 WARNING（Sina 500 刷屏），异常由调用方的 fallback 处理
+logging.getLogger("akshare").setLevel(logging.ERROR)
+
 from config import DB_PATH, INDEX_CODE, START_DATE, POOL_MIN_AMOUNT
 from utils import is_trade_day
 
@@ -386,13 +389,16 @@ def fetch_index_incremental():
 def _fetch_stock_sina(code, start_str, end_str):
     def _code_sina(c):
         return f"sh{c}" if c.startswith(("6", "9")) else f"sz{c}"
-    df = ak.stock_zh_a_daily(symbol=_code_sina(code),
-                             start_date=start_str, end_date=end_str, adjust="qfq")
-    if df is None or df.empty:
+    try:
+        df = ak.stock_zh_a_daily(symbol=_code_sina(code),
+                                 start_date=start_str, end_date=end_str, adjust="qfq")
+        if df is None or df.empty:
+            return None
+        df["date"] = pd.to_datetime(df["date"])
+        df["code"] = code
+        return df[["code", "date", "open", "high", "low", "close", "volume", "amount"]]
+    except Exception:
         return None
-    df["date"] = pd.to_datetime(df["date"])
-    df["code"] = code
-    return df[["code", "date", "open", "high", "low", "close", "volume", "amount"]]
 
 
 @rate_limited("em")
@@ -587,7 +593,14 @@ def update_stock_data_daily(pool_codes, lookback_days=120, max_workers=5):
         if saved > 0:
             logging.info("增量更新 %d 只股票今日数据（并发%d）", saved, max_workers)
 
-    df_hist = load_cached("stock_daily", start=start_date, end=today)
+    conn = get_conn()
+    placeholders = ",".join(["?"] * len(pool_codes))
+    df_hist = pd.read_sql(
+        f"SELECT * FROM stock_daily WHERE code IN ({placeholders}) AND date >= ? ORDER BY date",
+        conn, params=pool_codes + [start_date]
+    )
+    conn.close()
+    logging.info("个股缓存: %d 条(%d 只, %s 起)", len(df_hist), df_hist["code"].nunique() if not df_hist.empty else 0, start_date)
     stock_list = get_stock_list()
     df_hist = df_hist.merge(stock_list[["code", "name", "industry"]], on="code", how="left")
     logging.info("个股数据: %d 条, %d 只", len(df_hist), df_hist["code"].nunique() if not df_hist.empty else 0)

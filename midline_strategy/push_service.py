@@ -323,8 +323,10 @@ def send_daily_report(
     lines.append("仅供参考，不构成投资建议。尾盘确认信号，次日集合竞价观察承接。")
 
     text = "\n".join(lines)
-    _send_tg(text)
-    _send_serverchan(f"中线波段日报 {today_str}", text)
+    if PUSH_TYPE == "telegram":
+        _send_tg(text)
+    elif PUSH_TYPE == "serverchan":
+        _send_serverchan(f"中线波段日报 {today_str}", text)
 
 
 # ==================== 周报 ====================
@@ -404,8 +406,10 @@ def send_weekly_report(
     lines.append("仅供参考，不构成投资建议。")
 
     text = "\n".join(lines)
-    _send_tg(text)
-    _send_serverchan(f"中线波段周报 {week_start}~{week_end}", text)
+    if PUSH_TYPE == "telegram":
+        _send_tg(text)
+    elif PUSH_TYPE == "serverchan":
+        _send_serverchan(f"中线波段周报 {week_start}~{week_end}", text)
 
 
 # ==================== 旧接口兼容 ====================
@@ -476,7 +480,10 @@ def send_test():
         f"中线波段系统启动 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         f"定时任务: 15:35 / 18:00\n推送: {PUSH_TYPE}"
     )
-    _send_tg(msg)
+    if PUSH_TYPE == "telegram":
+        _send_tg(msg)
+    elif PUSH_TYPE == "serverchan":
+        _send_serverchan("中线波段系统启动", msg)
 
 
 def send(signals_df, market_state, pos_limit):

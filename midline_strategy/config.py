@@ -13,6 +13,7 @@ VOL_RATIO_MAX = 4.0
 VOL_RATIO_MIN_BULL = 1.5    # 牛市放量下限（高于震荡市，过滤跟风盘）
 VOL_RATIO_MIN_OSC = 1.0     # 震荡市放量下限（降低门槛，增加信号）
 MAX_DEVIATION = 0.05
+AMPLITUDE_5D_MIN = 0.05        # 最近5日最低振幅，过滤窄幅震荡股
 
 # ================== KAMA 自适应均线 ==================
 KAMA_ER_FAST = 2       # 快速 EMA 周期（固定）
@@ -44,7 +45,7 @@ START_DATE = "20200101"
 DB_PATH = "trading_data.db"
 
 # ================== 推送 ==================
-PUSH_TYPE = "telegram"  # "telegram" | "serverchan"
+PUSH_TYPE = "serverchan"  # "telegram" | "serverchan"
 TELEGRAM_TOKEN = "8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s"
 TELEGRAM_CHAT_ID = "-5277218158"
 SERVERCHAN_KEY = "SCT353028TEFdxCoH9ZCauuBaDj1R7DBM8"
