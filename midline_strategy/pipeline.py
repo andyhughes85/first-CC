@@ -152,23 +152,36 @@ def get_hot_industries(stocks_df):
     return top.head(8).index.tolist()
 
 
-def daily_job():
-    """每日定时任务"""
+def _status_update(status, label, state="running"):
+    """更新 st.status 对象（容错，无 status 时跳过）"""
+    if status is not None:
+        try:
+            status.update(label=label, state=state)
+        except Exception:
+            pass
+
+
+def daily_job(status=None):
+    """每日定时任务，status 可选传 st.status() 对象用于 UI 进度展示"""
     global _consecutive_empty, _daily_state_history
 
     logging.info("开始日线任务")
+    _status_update(status, "📡 获取指数数据...")
     try:
         # 指数数据（轻量，可在线获取）
         index_df = fetch_index_incremental()
         if index_df is None or index_df.empty:
             logging.error("指数数据获取失败")
+            _status_update(status, "❌ 指数数据获取失败", "error")
             return
         index_df = add_index_indicators(index_df)
         market_info = judge_market_state(index_df)
         ms, pos = market_info["state"], market_info["pos_limit"]
+        _status_update(status, f"📊 市场状态: {ms} 仓位≤{pos:.0%}")
         logging.info("市场状态: %s, 仓位上限: %.0f%%", ms, pos * 100)
 
         # 个股数据（从缓存读取，不触发在线下载，避免超时）
+        _status_update(status, "💾 加载个股缓存数据...")
         stocks_df = load_cached("stock_daily",
             start=(datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d"))
         if not stocks_df.empty:
@@ -177,21 +190,28 @@ def daily_job():
                 stocks_df = stocks_df.merge(stock_list[["code","name","industry"]], on="code", how="left")
             except Exception as e:
                 logging.warning("行业信息加载失败: %s", e)
-        logging.info("个股缓存数据: %d 条, %d 只", len(stocks_df),
-                     stocks_df["code"].nunique() if not stocks_df.empty else 0)
+        n_stocks = stocks_df["code"].nunique() if not stocks_df.empty else 0
+        _status_update(status, f"🔍 计算行业动量（{n_stocks} 只股票）...")
+        logging.info("个股缓存数据: %d 条, %d 只", len(stocks_df), n_stocks)
 
         hot = get_hot_industries(stocks_df)
+        _status_update(status, f"📈 强势行业: {hot[:3] if hot else '无'}")
         logging.info("强势行业: %s", hot)
 
+        _status_update(status, "🎯 生成信号...")
         signals, filter_stats = generate_signals(stocks_df, hot, ms)
+        _status_update(status, f"🤖 LGB 重排序（{len(signals)} 个信号）...")
         signals = _lgb_rerank(signals, stocks_df)
 
         # 虚拟盘自动交易
+        _status_update(status, "💼 虚拟盘执行...")
         try:
             from paper_trader import PaperTrader
             _trader = PaperTrader()
             _trader.process(signals, market_info, stocks_df, datetime.now())
-            logging.info("虚拟盘处理完成，持仓 %d 只", _trader.get_summary()["position_count"])
+            n_pos = _trader.get_summary()["position_count"]
+            _status_update(status, f"✅ 虚拟盘完成，持仓 {n_pos} 只")
+            logging.info("虚拟盘处理完成，持仓 %d 只", n_pos)
         except Exception as e:
             logging.error("虚拟盘处理失败: %s", e, exc_info=True)
 

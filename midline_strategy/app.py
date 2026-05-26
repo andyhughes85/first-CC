@@ -84,13 +84,13 @@ with st.sidebar:
     with col1:
         btn_label = "▶ 跑策略" if not already_ran_today else "▶ 重新执行"
         if st.button(btn_label, width="stretch"):
-            with st.spinner("执行中（约5-10秒）..."):
+            with st.status("策略执行中...", expanded=True) as _status:
                 try:
-                    _daily_job()
-                    st.success("✅ 策略执行完成")
-                    st.rerun()
+                    _daily_job(_status)
+                    _status.update(label="✅ 策略执行完成", state="complete")
                 except Exception as e:
-                    st.error(f"❌ {e}")
+                    _status.update(label=f"❌ {e}", state="error")
+            st.rerun()
     with col2:
         if st.button("🔄 刷新", width="stretch"):
             st.rerun()
