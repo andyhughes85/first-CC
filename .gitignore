@@ -37,5 +37,11 @@ extract_*.py
 extract_pdf.py
 *全文.txt
 
+# Config overrides (runtime)
+config_overrides.json
+
+# Trade calendar cache
+trade_calendar_cache.json
+
 # Generated equity curve
 equity_*.csv
