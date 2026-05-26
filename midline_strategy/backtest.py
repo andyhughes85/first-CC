@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 
 from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION, \
-    KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN, VOL_RATIO_MIN_BULL, VOL_RATIO_MIN_OSC
+    KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN, VOL_RATIO_MIN_BULL, VOL_RATIO_MIN_OSC, AMPLITUDE_5D_MIN
 from data_fetcher import load_cached
 from market_state import judge_market_state, add_index_indicators
 from lgb_features import get_lgb_feature_cols
@@ -185,6 +185,8 @@ class Backtest:
             g["ma_distance"] = (g["ma5"] - g["ma20"]) / g["ma20"]
             # 反转因子：20日最大回撤 (close / 20日高点 - 1)
             g["max_dd_20"] = g["close"] / g["close"].rolling(20).max() - 1
+            # 5日振幅：过滤窄幅震荡的低质量信号
+            g["amplitude_5d"] = g["high"].rolling(5).max() / g["low"].rolling(5).min() - 1
             # 缠论底背驰：回调力度减弱（MACD绿柱持续缩短）
             g["ema12"] = g["close"].ewm(span=12).mean()
             g["ema26"] = g["close"].ewm(span=26).mean()
@@ -264,7 +266,7 @@ class Backtest:
               .groupby(level=0, group_keys=False)
               .apply(_calc)
               .reset_index())
-        df = df.dropna(subset=["ma5", "ma10", "ma20", "ma60", "vol_ma20", "atr", "mom_20", "mom_60", "ma_distance", "max_dd_20"])
+        df = df.dropna(subset=["ma5", "ma10", "ma20", "ma60", "vol_ma20", "atr", "mom_20", "mom_60", "ma_distance", "max_dd_20", "amplitude_5d"])
 
         df["vol_ratio"] = df["volume"] / df["vol_ma20"]
         df["deviation"] = (df["close"] - df["ma20"]) / df["ma20"]
@@ -280,9 +282,10 @@ class Backtest:
         )
         mask_dev = df["deviation"] < MAX_DEVIATION
         mask_yang = df["close"] > df["open"]
+        mask_amplitude = df["amplitude_5d"] >= AMPLITUDE_5D_MIN
 
         # 基础信号不含量比、底背驰、蔡森——三者都在 _buy_check 中根据市场状态动态决定
-        df["signal_base"] = mask_trend & mask_dev & mask_yang
+        df["signal_base"] = mask_trend & mask_dev & mask_yang & mask_amplitude
         df["has_divergence"] = df["divergence_bull"]
         df["has_caisen"] = (df["has_bdr"] | df["has_w"]) & ~df["has_fb"]
 

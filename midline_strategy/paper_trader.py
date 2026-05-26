@@ -50,6 +50,8 @@ class PaperTrader:
                 close REAL, volume_ratio REAL, deviation REAL,
                 score REAL, industry TEXT, executed INTEGER DEFAULT 0
             );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_signals_date_code
+                ON paper_signals(date, code);
         """)
         conn.commit()
         conn.close()
@@ -384,7 +386,8 @@ class PaperTrader:
         date_str = today.strftime("%Y-%m-%d")
         for _, row in signals_df.iterrows():
             conn.execute(
-                "INSERT INTO paper_signals (date, code, name, close, volume_ratio, deviation, score, industry) "
+                "INSERT OR IGNORE INTO paper_signals "
+                "(date, code, name, close, volume_ratio, deviation, score, industry) "
                 "VALUES (?,?,?,?,?,?,?,?)",
                 (date_str, row["code"], row.get("name", ""),
                  float(row["close"]), float(row.get("volume_ratio", 0)),
