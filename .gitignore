@@ -37,6 +37,12 @@ extract_*.py
 extract_pdf.py
 *全文.txt
 
+# Backfill scripts & progress
+backfill_*.py
+backfill_*.txt
+backfill_*.log
+backfill_*.json
+
 # Config overrides (runtime)
 config_overrides.json
 

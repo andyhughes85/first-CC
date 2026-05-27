@@ -33,6 +33,6 @@ ssh "$SERVER" "cd $REMOTE_PATH && git pull origin $BRANCH" || {
 
 # 4. 重启服务
 echo "=== 重启系统服务 ==="
-ssh "$SERVER" "systemctl restart stock-bot.service 2>/dev/null; echo 'stock-bot 已重启'"
+ssh "$SERVER" "systemctl restart stock-bot.service stock-scheduler.service 2>/dev/null; echo '服务已重启'"
 
 echo "=== 部署完成 ==="
