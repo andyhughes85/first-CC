@@ -249,9 +249,12 @@ def daily_job(status=None):
         _daily_state_history.append((
             datetime.now().strftime("%Y-%m-%d"), ms, pos, market_info.get("trend_detail", "")
         ))
+        hmm_state = market_info.get("hmm_state", "")
+        hmm_conf = round(max(market_info.get("hmm_probs", {}).values(), default=0) * 100)
         save_market_state(
             datetime.now().strftime("%Y-%m-%d"), ms, pos,
             market_info.get("index_close", 0), market_info.get("trend_detail", ""),
+            hmm_state=hmm_state, hmm_confidence=hmm_conf,
         )
 
         # 推送日报

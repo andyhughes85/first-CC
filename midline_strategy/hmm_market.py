@@ -148,18 +148,22 @@ class GaussianHMM:
 
 
 def build_hmm_features(df):
-    """构建 HMM 输入特征（4维：对数收益、波动率、成交量变化、价格位置）"""
+    """构建 HMM 输入特征（4维：对数收益、短期波动率、量比、趋势偏离度）
+
+    v2 改进：用 trend_strength 替代 price_position 减少震荡市误判；
+              波动率窗口 10→5 更快响应；pct_change 改为量比更稳定
+    """
     features = pd.DataFrame(index=df.index)
     returns = df["close"] / df["close"].shift(1)
     returns = returns.replace(0, np.nan).clip(lower=1e-10)
     features["log_return"] = np.log(returns)
-    features["volatility"] = features["log_return"].rolling(10).std()
+    features["volatility"] = features["log_return"].rolling(5).std()
     vol_col = "volume" if "volume" in df.columns and df["volume"].sum() > 0 else "amount"
-    features["volume_change"] = df[vol_col].pct_change(5).replace([np.inf, -np.inf], np.nan)
-    low_20 = df["close"].rolling(20).min()
-    high_20 = df["close"].rolling(20).max()
-    features["price_position"] = (df["close"] - low_20) / (high_20 - low_20 + 1e-10)
-    return features.fillna(0).clip(-10, 10)  # 裁剪极端值防溢出
+    vol_sma5 = df[vol_col].rolling(5).mean().replace(0, np.nan)
+    features["volume_ratio"] = (df[vol_col] / vol_sma5).clip(0, 10)
+    sma20 = df["close"].rolling(20).mean()
+    features["trend_strength"] = (df["close"] - sma20) / sma20.clip(lower=1)
+    return features.fillna(0).clip(-10, 10)
 
 
 def train_hmm_model(index_df):

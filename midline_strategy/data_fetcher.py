@@ -153,15 +153,22 @@ def save_data(df, table):
         conn.close()
 
 
-def save_market_state(date, state, pos_limit, index_close, trend_detail):
-    """持久化每日市场状态"""
+def save_market_state(date, state, pos_limit, index_close, trend_detail,
+                       hmm_state=None, hmm_confidence=None):
+    """持久化每日市场状态（含 HMM）"""
+    # 确保表结构包含 HMM 字段
     conn = get_conn()
     try:
+        for col in ("hmm_state", "hmm_confidence"):
+            try:
+                conn.execute(f"ALTER TABLE market_state_history ADD COLUMN {col} TEXT")
+            except Exception:
+                pass  # 列已存在
         conn.execute(
             """INSERT OR REPLACE INTO market_state_history
-               (date, state, pos_limit, index_close, trend_detail)
-               VALUES (?, ?, ?, ?, ?)""",
-            (date, state, pos_limit, index_close, trend_detail),
+               (date, state, pos_limit, index_close, trend_detail, hmm_state, hmm_confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (date, state, pos_limit, index_close, trend_detail, hmm_state, hmm_confidence),
         )
         conn.commit()
     finally:
