@@ -4,18 +4,14 @@ import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from config import SERVERCHAN_KEY, POOL_MIN_AMOUNT
+from config import (
+    SERVERCHAN_KEY, POOL_MIN_AMOUNT,
+    ALERT_SURGE_PCT, ALERT_SURGE_VOL_RATIO,
+    ALERT_VOLUME_SPIKE, ALERT_AMOUNT_FLOOR, ALERT_MAX_PER_TYPE,
+)
 from push_service import _send_serverchan
 
 log = logging.getLogger("intraday_watch")
-
-# 预警阈值
-ALERT_LIMITS = {
-    "surge_pct": 0.05,       # 涨幅 ≥ 5%
-    "surge_vol_ratio": 2.0,  # 且量比 ≥ 2.0
-    "volume_spike": 5.0,     # 量比 ≥ 5.0（纯放量异动）
-    "amount_floor": 2e8,     # 最低成交额 2亿（过滤微盘股）
-}
 
 _INDUSTRY_SHORT = {
     "C39计算机、通信和其他电子设备制造业": "电子",
@@ -90,7 +86,7 @@ def _run():
         spot[col] = pd.to_numeric(spot[col], errors="coerce").fillna(0)
 
     # 过滤僵尸股
-    spot = spot[spot["成交额"] >= ALERT_LIMITS["amount_floor"]]
+    spot = spot[spot["成交额"] >= ALERT_AMOUNT_FLOOR]
 
     now = datetime.now().strftime("%H:%M")
     today = datetime.now().strftime("%Y-%m-%d")
@@ -98,8 +94,8 @@ def _run():
 
     # 条件1: 放量拉升（涨幅大 + 放量）
     mask_surge = (
-        (spot["涨跌幅"] >= ALERT_LIMITS["surge_pct"] * 100)
-        & (spot["量比"] >= ALERT_LIMITS["surge_vol_ratio"])
+        (spot["涨跌幅"] >= ALERT_SURGE_PCT * 100)
+        & (spot["量比"] >= ALERT_SURGE_VOL_RATIO)
     )
     surge = spot[mask_surge].nlargest(10, "涨跌幅")
     for _, row in surge.iterrows():
@@ -115,8 +111,8 @@ def _run():
 
     # 条件2: 纯放量异动（量比极大）
     mask_vol = (
-        (spot["量比"] >= ALERT_LIMITS["volume_spike"])
-        & (spot["涨跌幅"] < ALERT_LIMITS["surge_pct"] * 100)
+        (spot["量比"] >= ALERT_VOLUME_SPIKE)
+        & (spot["涨跌幅"] < ALERT_SURGE_PCT * 100)
     )
     vol_spike = spot[mask_vol].nlargest(10, "量比")
     for _, row in vol_spike.iterrows():
@@ -142,7 +138,7 @@ def _run():
         if not group:
             continue
         lines.append(f"【{atype}】")
-        for a in group[:5]:
+        for a in group[:ALERT_MAX_PER_TYPE]:
             ind_str = f" | {a['industry']}" if a['industry'] else ""
             lines.append(
                 f"  {a['name']}({a['code']}){ind_str}\n"
