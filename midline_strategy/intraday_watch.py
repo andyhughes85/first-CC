@@ -49,28 +49,51 @@ def run():
         log.error("盘中预警异常: %s", e, exc_info=True)
 
 
+def _get_volume_ratio(spot):
+    """获取量比：优先用原始列，缺失时从成交额估算"""
+    spot = spot.copy()
+    if "量比" in spot.columns:
+        return pd.to_numeric(spot["量比"], errors="coerce").fillna(0)
+    # 新浪源无量比，用成交额/5日均额估算
+    if "成交额" in spot.columns and "amount_ma5" in spot.columns:
+        amt = pd.to_numeric(spot["成交额"], errors="coerce").fillna(0)
+        ma5 = pd.to_numeric(spot["amount_ma5"], errors="coerce").fillna(0).replace(0, np.nan)
+        return (amt / ma5).fillna(1.0).clip(0, 20)
+    return pd.Series(1.0, index=spot.index)
+
+
 def _run():
     import akshare as ak
 
     log.info("盘中预警: 获取全市场实时行情...")
 
     spot = None
-    # 尝试1: 东财
+    # 尝试1: 东财（含量比字段）
     try:
-        spot = ak.stock_zh_a_spot_em()
+        raw = ak.stock_zh_a_spot_em()
+        if raw is not None and not raw.empty:
+            raw = raw.copy()
+            raw.rename(columns={
+                "代码": "代码", "名称": "名称", "最新价": "最新价",
+                "涨跌幅": "涨跌幅", "成交量": "成交量", "成交额": "成交额",
+                "量比": "量比", "市盈率-动态": "市盈率",
+            }, inplace=True)
+            spot = raw
     except Exception:
         pass
-    # 尝试2: 新浪（降级）
+
+    # 尝试2: 新浪（降级，无量比字段）
     if spot is None or spot.empty:
         try:
             raw = ak.stock_zh_a_spot()
             if raw is not None and not raw.empty:
                 raw = raw.copy()
                 raw["代码"] = raw["代码"].str.extract(r"(\d{6})", expand=False)
-                raw.rename(columns={"名称": "名称", "最新价": "最新价",
-                                    "涨跌幅": "涨跌幅", "成交量": "成交量",
-                                    "成交额": "成交额", "量比": "量比",
-                                    "市盈率-动态": "市盈率"}, inplace=True)
+                raw.rename(columns={
+                    "名称": "名称", "最新价": "最新价",
+                    "涨跌幅": "涨跌幅", "成交量": "成交量",
+                    "成交额": "成交额",
+                }, inplace=True)
                 spot = raw
         except Exception:
             pass
@@ -82,8 +105,13 @@ def _run():
     # 清洗
     spot = spot.copy()
     spot["代码"] = spot["代码"].astype(str).str.zfill(6)
-    for col in ["最新价", "涨跌幅", "成交量", "成交额", "量比", "市盈率-动态"]:
-        spot[col] = pd.to_numeric(spot[col], errors="coerce").fillna(0)
+    for col in ["最新价", "涨跌幅", "成交量", "成交额"]:
+        if col in spot.columns:
+            spot[col] = pd.to_numeric(spot[col], errors="coerce").fillna(0)
+    spot["量比"] = _get_volume_ratio(spot)
+    for col in ["市盈率"]:
+        if col in spot.columns:
+            spot[col] = pd.to_numeric(spot[col], errors="coerce").fillna(0)
 
     # 过滤僵尸股
     spot = spot[spot["成交额"] >= ALERT_AMOUNT_FLOOR]
