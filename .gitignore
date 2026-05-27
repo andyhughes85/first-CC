@@ -30,6 +30,9 @@ backtest_*.csv
 backtest_summary.json
 *_integration_report.md
 
+# Backup files
+*.bak
+
 # Temporary analysis scripts
 _analyze_trades.py
 bench_*.py

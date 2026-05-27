@@ -3,6 +3,7 @@
 import sqlite3
 import pandas as pd
 import numpy as np
+import logging
 from datetime import datetime, timedelta
 from config import DB_PATH, STOP_LOSS, TIME_STOP_DAYS, MAX_POSITION_PER_STOCK
 
@@ -399,7 +400,83 @@ class PaperTrader:
 
     # ── UI 查询接口 ──
 
+    def refresh_spot_prices(self):
+        """获取持仓股票实时行情，更新数据库中的 current_price 和盈亏"""
+        conn = sqlite3.connect(self.db_path)
+        positions = conn.execute(
+            "SELECT code, entry_price FROM paper_positions"
+        ).fetchall()
+        if not positions:
+            conn.close()
+            return
+
+        codes = {p[0] for p in positions}
+        entry_map = {p[0]: p[1] for p in positions}
+        updated = 0
+
+        # 1. 优先从 stock_daily 拿今日收盘数据（15:35 后有数据）
+        today = datetime.now().strftime("%Y-%m-%d")
+        for code, entry_price in positions:
+            row = conn.execute(
+                "SELECT close FROM stock_daily WHERE code=? AND date=?",
+                (code, today)
+            ).fetchone()
+            if row:
+                close = float(row[0])
+                pnl = close / entry_price - 1 if entry_price > 0 else 0
+                conn.execute(
+                    "UPDATE paper_positions SET current_price=?, pnl=?, pnl_pct=? WHERE code=?",
+                    (close, round(pnl, 4), round(pnl, 4), code)
+                )
+                updated += 1
+
+        # 2. 剩余未更新的走实时行情（直接调用新浪单个股票接口，轻量）
+        if updated < len(positions):
+            try:
+                import requests as _req
+                _SZ_NEW = {"0", "3"}  # 深圳: 000/002/300
+                _SH_NEW = {"6"}       # 上海: 600/601/603/605
+                sina_codes = ",".join(
+                    f"sh{c}" if c[0] in _SH_NEW else f"sz{c}" for c in codes
+                )
+                resp = _req.get(
+                    f"http://hq.sinajs.cn/list={sina_codes}",
+                    headers={"Referer": "https://finance.sina.com.cn"},
+                    timeout=10,
+                )
+                resp.encoding = "gbk"
+                for line in resp.text.strip().split("\n"):
+                    if not line.strip():
+                        continue
+                    parts = line.split("=\"")
+                    if len(parts) < 2:
+                        continue
+                    data = parts[1].rstrip("\";")
+                    fields = data.split(",")
+                    if len(fields) < 4:
+                        continue
+                    code = parts[0].split("_")[-1].lstrip("sh").lstrip("sz")
+                    close = float(fields[3]) if fields[3] else 0  # 最新价
+                    if close <= 0:
+                        continue
+                    entry_price = entry_map.get(code, 0)
+                    pnl = close / entry_price - 1 if entry_price > 0 else 0
+                    conn.execute(
+                        "UPDATE paper_positions SET current_price=?, pnl=?, pnl_pct=? WHERE code=?",
+                        (close, round(pnl, 4), round(pnl, 4), code)
+                    )
+                    updated += 1
+                    logging.info("实时更新 %s: %.2f (%.2f%%)", code, close, pnl * 100)
+            except Exception as e:
+                logging.warning("实时行情更新失败: %s", e)
+
+        if updated:
+            logging.info("持仓价格更新: %d/%d 只", updated, len(positions))
+        conn.commit()
+        conn.close()
+
     def get_positions(self):
+        self.refresh_spot_prices()
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql("SELECT * FROM paper_positions", conn)
         conn.close()
