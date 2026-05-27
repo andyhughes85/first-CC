@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from config import PUSH_TYPE, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, SERVERCHAN_KEY, TELEGRAM_PROXY, MAX_POSITION_PER_STOCK
 
 # 行业短名映射（CSRC 代码 → 可读简称）
-_INDUSTRY_SHORT_NAMES = {
+# 导出给 intraday_watch 等模块复用
+INDUSTRY_SHORT_NAMES = {
     "C39计算机、通信和其他电子设备制造业": "电子",
     "C35专用设备制造业": "专用设备",
     "C26化学原料和化学制品制造业": "化工",
@@ -54,8 +55,8 @@ def _shorten_industry(name):
     if not name:
         return name
     # 先查映射表
-    if name in _INDUSTRY_SHORT_NAMES:
-        return _INDUSTRY_SHORT_NAMES[name]
+    if name in INDUSTRY_SHORT_NAMES:
+        return INDUSTRY_SHORT_NAMES[name]
     # 无映射则去掉字母+数字前缀
     return re.sub(r"^[A-Z]\d+", "", name)
 

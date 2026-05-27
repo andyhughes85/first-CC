@@ -9,35 +9,16 @@ from config import (
     ALERT_SURGE_PCT, ALERT_SURGE_VOL_RATIO,
     ALERT_VOLUME_SPIKE, ALERT_AMOUNT_FLOOR, ALERT_MAX_PER_TYPE,
 )
-from push_service import _send_serverchan
+from push_service import _send_serverchan, INDUSTRY_SHORT_NAMES
 
 log = logging.getLogger("intraday_watch")
-
-_INDUSTRY_SHORT = {
-    "C39计算机、通信和其他电子设备制造业": "电子",
-    "C35专用设备制造业": "专用设备",
-    "C26化学原料和化学制品制造业": "化工",
-    "I65软件和信息技术服务业": "软件",
-    "C38电气机械和器材制造业": "电气设备",
-    "C27医药制造业": "医药",
-    "C34通用设备制造业": "通用设备",
-    "C36汽车制造业": "汽车",
-    "C29橡胶和塑料制品业": "橡塑",
-    "C30非金属矿物制品业": "非金属材料",
-    "C33金属制品业": "金属制品",
-    "D44电力、热力生产和供应业": "电力",
-    "C32有色金属冶炼和压延加工业": "有色",
-    "C37铁路、船舶、航空航天和其他运输设备制造业": "运输设备",
-    "C40仪器仪表制造业": "仪器仪表",
-    "C31黑色金属冶炼和压延加工业": "钢铁",
-}
 
 
 def _short_ind(name):
     if not name:
         return ""
-    if name in _INDUSTRY_SHORT:
-        return _INDUSTRY_SHORT[name]
+    if name in INDUSTRY_SHORT_NAMES:
+        return INDUSTRY_SHORT_NAMES[name]
     import re
     return re.sub(r"^[A-Z]\d+", "", name)
 

@@ -40,6 +40,9 @@ extract_*.py
 extract_pdf.py
 *全文.txt
 
+# One-off test scripts
+test_*.py
+
 # Backfill scripts & progress
 backfill_*.py
 backfill_*.txt

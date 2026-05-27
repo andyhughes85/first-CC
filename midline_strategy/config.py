@@ -23,6 +23,7 @@ ALERT_AMOUNT_FLOOR = 2e8       # 最低成交额 2亿（过滤微盘股）
 ALERT_MAX_PER_TYPE = 5         # 每类预警最多显示条数
 
 # ================== KAMA 自适应均线 ==================
+# 仅供回测 KAMA 模式使用（当前 USE_KAMA=False），生产用 SMA
 KAMA_ER_FAST = 2       # 快速 EMA 周期（固定）
 KAMA_ER_SLOW = 30      # 慢速 EMA 周期（固定）
 KAMA_MARKET_SHORT = 10  # 市场短期 ER 周期（替代 MA20）

@@ -1,7 +1,5 @@
 """主流程 — 定时任务调度"""
 
-import schedule
-import time
 import logging
 import pandas as pd
 import numpy as np
@@ -10,9 +8,8 @@ from datetime import datetime, timedelta
 from data_fetcher import fetch_index_incremental, save_market_state, load_cached, get_conn as _get_conn
 from market_state import judge_market_state, add_index_indicators
 from signal_engine import generate_signals
-from push_service import send, send_test, send_daily_report, send_weekly_report
-from utils import is_trade_day
-from config import DB_PATH, SCHEDULE_TIME, SCHEDULE_RETRY_TIME
+from push_service import send_daily_report, send_weekly_report
+from config import DB_PATH
 from lgb_features import build_lgb_features, get_lgb_feature_cols
 from lgb_model import LightGBMModel
 from hmm_market import train_hmm_model, load_hmm_model, save_hmm_model, predict_market_state
@@ -294,16 +291,3 @@ def weekly_job():
         daily_states=week_states,
         suggestion="可考虑增加周中行业动量再排序。",
     )
-
-
-if __name__ == "__main__":
-    logging.info("中线波段策略系统启动")
-    send_test()
-    schedule.every().day.at(SCHEDULE_TIME).do(daily_job)
-    schedule.every().day.at(SCHEDULE_RETRY_TIME).do(daily_job)
-    schedule.every().friday.at("18:00").do(weekly_job)
-    logging.info("定时任务已设置: %s, %s (周五+周报18:00)", SCHEDULE_TIME, SCHEDULE_RETRY_TIME)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
