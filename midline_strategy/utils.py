@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 import os
 
 # ── A股法定节假日（2025-2026年非周六日休市日）──
@@ -38,13 +39,17 @@ _KNOWN_WEEKEND_TRADE = {
 _TRADE_CACHE = None
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _CACHE_FILE = os.path.join(_SCRIPT_DIR, "trade_calendar_cache.json")
+_API_FAILED = False  # API 失败标记，避免每次重试
 
 
 def _fetch_calendar():
     """从 Sina 获取交易日历，缓存到 JSON"""
-    global _TRADE_CACHE
+    global _TRADE_CACHE, _API_FAILED
     if _TRADE_CACHE is not None:
         return _TRADE_CACHE
+    # API 已失败过，不再重试，直接走内置表
+    if _API_FAILED:
+        return None
     # 尝试从本地缓存加载
     if os.path.exists(_CACHE_FILE):
         try:
@@ -72,6 +77,8 @@ def _fetch_calendar():
         _TRADE_CACHE = dates
         return dates
     except Exception:
+        _API_FAILED = True
+        logging.warning("Sina 交易日历拉取失败，以内置表替代")
         return None
 
 
