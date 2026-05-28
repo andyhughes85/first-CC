@@ -1,6 +1,6 @@
-"""单只股票回填工作进程"""
+"""鍗曞彧鑲＄エ鍥炲～宸ヤ綔杩涚▼"""
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'midline_strategy'))
 os.environ["STREAMLIT_RUN"] = "1"
 import warnings
 warnings.filterwarnings("ignore")

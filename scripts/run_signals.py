@@ -1,4 +1,5 @@
-"""用缓存数据运行策略并输出信号JSON"""
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'midline_strategy'))
+"""鐢ㄧ紦瀛樻暟鎹繍琛岀瓥鐣ュ苟杈撳嚭淇″彿JSON"""
 import json, sys, logging, pandas as pd
 from datetime import datetime
 from data_fetcher import load_cached, get_stock_list

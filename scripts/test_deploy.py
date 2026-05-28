@@ -1,10 +1,12 @@
-"""远程部署测试脚本"""
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'midline_strategy'))
+"""杩滅▼閮ㄧ讲娴嬭瘯鑴氭湰"""
 import subprocess
 import sys
 
 HOST = "47.113.118.5"
 USER = "root"
-PASS = "i-wz9i16mpyemrq8jmb31m"
+# 已改用 SSH 密钥认证，密码方式已废弃
+PASS = os.environ.get("SSH_PASS", "")
 
 PYTHON_CMD = """
 cd /root/midline_strategy
@@ -12,7 +14,7 @@ git pull
 python3 -c '
 from data_fetcher import refresh_trading_pool, get_trading_pool
 pool = refresh_trading_pool()
-print("全市场股票数量:", len(pool))
+print("鍏ㄥ競鍦鸿偂绁ㄦ暟閲?", len(pool))
 print(pool.head().to_string())
 '
 """

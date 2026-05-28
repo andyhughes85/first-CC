@@ -205,6 +205,20 @@ def daily_job(status=None):
         _status_update(status, "💾 加载个股缓存数据...")
         stocks_df = load_cached("stock_daily",
             start=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"))
+        if stocks_df.empty:
+            logging.warning("个股缓存为空，触发在线拉取...")
+            _status_update(status, "📡 个股缓存为空，在线拉取...")
+            try:
+                from data_fetcher import get_trading_pool, update_stock_data_daily
+                pool = get_trading_pool()
+                if pool:
+                    pool_codes = [c for c, _ in pool]
+                    update_stock_data_daily(pool_codes)
+                    stocks_df = load_cached("stock_daily",
+                        start=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"))
+                    logging.info("在线拉取完成: %d 条", len(stocks_df))
+            except Exception as e:
+                logging.error("在线拉取失败: %s", e)
         if not stocks_df.empty:
             try:
                 stock_list = pd.read_sql("SELECT code, name, industry FROM stock_list", _get_conn())

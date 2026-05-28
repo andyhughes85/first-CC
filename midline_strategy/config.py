@@ -18,9 +18,9 @@ MAX_DEVIATION = 0.05
 AMPLITUDE_5D_MIN = 0.05        # 最近5日最低振幅，过滤窄幅震荡股
 
 # ================== 盘中预警参数 ==================
-ALERT_SURGE_PCT = 0.05         # 放量拉升涨幅阈值 ≥5%
+ALERT_SURGE_PCT = 0.03         # 放量拉升涨幅阈值 ≥3%（震荡市5%过高）
 ALERT_SURGE_VOL_RATIO = 2.0    # 放量拉升量比阈值 ≥2.0
-ALERT_VOLUME_SPIKE = 5.0       # 纯放量异动量比阈值 ≥5.0
+ALERT_VOLUME_SPIKE = 3.0       # 纯放量异动量比阈值 ≥3.0（原5.0过高）
 ALERT_AMOUNT_FLOOR = 2e8       # 最低成交额 2亿（过滤微盘股）
 ALERT_MAX_PER_TYPE = 5         # 每类预警最多显示条数
 

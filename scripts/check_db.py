@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'midline_strategy'))
 import sqlite3
 from config import DB_PATH
 

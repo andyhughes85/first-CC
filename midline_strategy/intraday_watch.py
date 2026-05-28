@@ -96,6 +96,7 @@ def _run():
 
     # 过滤僵尸股
     spot = spot[spot["成交额"] >= ALERT_AMOUNT_FLOOR]
+    log.info("全市场 %d 只, 僵尸过滤后 %d 只", len(spot) if "spot" in dir() else 0, len(spot))
 
     now = datetime.now().strftime("%H:%M")
     today = datetime.now().strftime("%Y-%m-%d")
@@ -107,6 +108,7 @@ def _run():
         & (spot["量比"] >= ALERT_SURGE_VOL_RATIO)
     )
     surge = spot[mask_surge].nlargest(10, "涨跌幅")
+    log.info("放量拉升条件: %d 只, 取前10: %d 只", mask_surge.sum(), len(surge))
     for _, row in surge.iterrows():
         alerts.append({
             "type": "🚀 放量拉升",
@@ -124,6 +126,7 @@ def _run():
         & (spot["涨跌幅"] < ALERT_SURGE_PCT * 100)
     )
     vol_spike = spot[mask_vol].nlargest(10, "量比")
+    log.info("纯放量异动条件: %d 只, 取前10: %d 只", mask_vol.sum(), len(vol_spike))
     for _, row in vol_spike.iterrows():
         alerts.append({
             "type": "📊 放量异动",
