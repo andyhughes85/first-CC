@@ -6,6 +6,7 @@ import numpy as np
 import logging
 from datetime import datetime, timedelta
 from config import DB_PATH, STOP_LOSS, TIME_STOP_DAYS, MAX_POSITION_PER_STOCK
+from push_service import _send_tg, _send_serverchan
 
 # 回测参数（与 backtest.py 对齐）
 _SINGLE_POSITION = 0.08  # 单只股票基准仓位
@@ -187,6 +188,18 @@ class PaperTrader:
         )
         conn.commit()
         conn.close()
+
+        # 推送出场通知
+        emoji = "🛑" if pnl <= 0 else "✅"
+        direction = "止损" if pnl <= 0 else "止盈"
+        msg = (
+            f"{emoji} 虚拟盘 {direction} {name}({code})\n"
+            f"卖出价: {price:.2f} | 盈亏: {pnl:+.2f} ({pnl_pct:+.2%})\n"
+            f"持仓: {hold_days}天 | 原因: {reason}"
+        )
+        _send_tg(msg)
+        _send_serverchan(f"虚拟盘 {direction} {name}", msg)
+
         return True
 
     # ── 出场检查（复用 backtest.py 逻辑）──
