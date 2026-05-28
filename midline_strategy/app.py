@@ -10,6 +10,8 @@ import subprocess, os
 
 st.set_page_config(page_title="中线策略监控", page_icon="📊", layout="wide")
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 st.markdown("""
 <style>
 #root > div:first-child { padding: 0 1rem; }
@@ -143,7 +145,7 @@ with st.sidebar:
         _ov["POOL_MIN_AMOUNT"] = int(st.number_input("最低成交额(万)", value=int(_cfg.POOL_MIN_AMOUNT/1e4), step=1000, format="%d")) * 10000
         if st.button("💾 保存参数", use_container_width=True):
             import json
-            with open("config_overrides.json", "w") as _f:
+            with open(os.path.join(_SCRIPT_DIR, "config_overrides.json"), "w") as _f:
                 json.dump(_ov, _f, indent=2, ensure_ascii=False)
             st.success("✅ 已保存到 config_overrides.json\n重启 Streamlit 后生效")
             st.rerun()

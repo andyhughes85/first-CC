@@ -13,7 +13,8 @@ from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN,
 from lgb_features import build_lgb_features, create_label, get_lgb_feature_cols, add_meta_label, triple_barrier_meta_label
 from lgb_model import LightGBMModel, FORWARD_DAYS, BUY_THRESHOLD
 
-MODEL_DIR = "models"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(_SCRIPT_DIR, "models")
 TRAIN_START = "2018-01-01"
 TRAIN_END = "2024-12-31"
 

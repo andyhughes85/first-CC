@@ -1,12 +1,14 @@
 """回测系统 — 逐日模拟 (独立于线上配置)"""
 
 import logging
+import os
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION, \
     KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN, VOL_RATIO_MIN_BULL, VOL_RATIO_MIN_OSC, AMPLITUDE_5D_MIN
@@ -687,11 +689,11 @@ class Backtest:
         from datetime import datetime as _dt
 
         eq = pd.DataFrame(self.equity_curve, columns=["date", "value"])
-        eq.to_csv("backtest_equity.csv", index=False, encoding="utf-8")
+        eq.to_csv(os.path.join(_SCRIPT_DIR, "backtest_equity.csv"), index=False, encoding="utf-8")
 
         if self.trades:
             trades = pd.DataFrame(self.trades)
-            trades.to_csv("backtest_trades.csv", index=False, encoding="utf-8")
+            trades.to_csv(os.path.join(_SCRIPT_DIR, "backtest_trades.csv"), index=False, encoding="utf-8")
 
         summary = {
             "start_date": str(self.start_date.date()),
@@ -731,10 +733,10 @@ class Backtest:
         ])
         summary["green_light"] = green
 
-        with open("backtest_summary.json", "w", encoding="utf-8") as f:
+        with open(os.path.join(_SCRIPT_DIR, "backtest_summary.json"), "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
 
-        log.info("回测结果已保存: backtest_equity.csv / backtest_trades.csv / backtest_summary.json")
+        log.info("回测结果已保存: backtest_equity.csv / backtest_trades.csv / backtest_summary.json (in %s)", _SCRIPT_DIR)
 
     # ---- 绩效报告 ----
 

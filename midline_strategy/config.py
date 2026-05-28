@@ -1,4 +1,6 @@
 # ================== 策略参数 ==================
+import os
+
 MARKET_MA_SHORT = 20
 MARKET_MA_LONG = 60
 ATR_PERIOD = 14
@@ -50,7 +52,8 @@ INDUSTRY_MOMENTUM_DAYS = 20
 INDEX_CODE = "000300"          # 沪深300
 SINA_INDEX_SYMBOL = "sh000300"
 START_DATE = "20200101"
-DB_PATH = "trading_data.db"
+_CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(_CONFIG_DIR, "trading_data.db")
 
 # ================== 推送 ==================
 PUSH_TYPE = "telegram"  # "telegram" | "serverchan"

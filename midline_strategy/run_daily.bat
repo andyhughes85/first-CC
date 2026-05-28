@@ -1,3 +1,3 @@
 @echo off
-cd /d "D:\first CC\midline_strategy"
+cd /d "%~dp0"
 python pipeline.py

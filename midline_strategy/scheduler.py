@@ -2,15 +2,18 @@
 import schedule
 import time
 import logging
+import os
 from datetime import datetime, time as dtime
 from pipeline import daily_job
 from intraday_watch import run as intraday_watch
 from utils import is_trade_day
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="trading_bot.log",
+    filename=os.path.join(_SCRIPT_DIR, "trading_bot.log"),
 )
 log = logging.getLogger("scheduler")
 

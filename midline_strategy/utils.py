@@ -36,7 +36,8 @@ _KNOWN_WEEKEND_TRADE = {
 }
 
 _TRADE_CACHE = None
-_CACHE_FILE = "trade_calendar_cache.json"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CACHE_FILE = os.path.join(_SCRIPT_DIR, "trade_calendar_cache.json")
 
 
 def _fetch_calendar():

@@ -14,10 +14,12 @@ from lgb_features import build_lgb_features, get_lgb_feature_cols
 from lgb_model import LightGBMModel
 from hmm_market import train_hmm_model, load_hmm_model, save_hmm_model, predict_market_state
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="trading_bot.log",
+    filename=os.path.join(_SCRIPT_DIR, "trading_bot.log"),
 )
 
 # 连续空仓计数器
