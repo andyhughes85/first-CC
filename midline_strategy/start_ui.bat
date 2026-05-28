@@ -26,6 +26,14 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
+:: 检查端口是否已被占用
+netstat -ano | findstr ":8520 " | findstr LISTEN >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [面板已在运行] 直接打开浏览器...
+    start http://localhost:8520
+    exit /b 0
+)
+
 echo [1/1] 启动 Streamlit (http://localhost:8520)...
 start http://localhost:8520
 python -m streamlit run app.py --server.port 8520
