@@ -35,7 +35,8 @@ backtest_summary.json
 
 # Temporary analysis scripts
 _analyze_trades.py
-bench_*.py
+# bench files (keep scripts/bench/ trackable)
+/midline_strategy/bench_*.py
 extract_*.py
 extract_pdf.py
 *全文.txt
