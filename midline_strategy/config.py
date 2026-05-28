@@ -53,7 +53,7 @@ START_DATE = "20200101"
 DB_PATH = "trading_data.db"
 
 # ================== 推送 ==================
-PUSH_TYPE = "serverchan"  # "telegram" | "serverchan"
+PUSH_TYPE = "telegram"  # "telegram" | "serverchan"
 TELEGRAM_TOKEN = "8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s"
 TELEGRAM_CHAT_ID = "-5277218158"
 SERVERCHAN_KEY = "SCT353028TEFdxCoH9ZCauuBaDj1R7DBM8"
