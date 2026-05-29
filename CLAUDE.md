@@ -112,6 +112,17 @@
 
 Risk: 单股 ≤ 10%，止损 -7%，止盈 10%，时间止损 15 自然日
 
+## Deployment Checklist
+
+修改以下模块前必须逐项检查：
+
+| 模块 | 检查项 |
+|------|--------|
+| `tunnel_runner.bat` | 清理旧进程逻辑完整？端口 1080 确认干净？|
+| `push_service.py` | 双通道（Telegram + Server酱）都配了？|
+| `pipeline.py` / `scheduler.py` | 异常隔离（try/except）到位？|
+| `config.py` / `settings.json` | 引用的路径/文件存在？|
+
 ## Telegram Bot (bot.py) — 手机自然语言控制
 
 运行在服务器上的 systemd 服务 `stock-bot.service`，开机自启，断线自动重连。

@@ -1,0 +1,36 @@
+﻿# 数据库
+trading_data.db
+trading_data.duckdb
+*.db
+*.duckdb
+
+# 缓存 & 临时文件
+__pycache__/
+*.pyc
+*.pyo
+temp_*.py
+_patch_*.py
+_install_*.py
+_edit_*.py
+_p0_*.py
+
+# 实验输出（保留 git log，图表不提交）
+experiments/*/equity_curve.png
+experiments/*/monthly_heatmap.png
+experiments/*/trades_analysis.png
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 日志
+*.log
+*.log.*
+
+# 模型文件（大文件，不提交）
+models/*.txt
+
+# 系统
+Thumbs.db
+.DS_Store

@@ -99,29 +99,86 @@ def get_last_run_info():
 
 
 def _lgb_rerank(signals, stocks_df):
-    """用 LightGBM 模型对信号重排序"""
+    """用 LightGBM 模型对信号重排序（含元标注观察通道）"""
     model = _load_lgb_model()
     if model is None or signals.empty:
         return signals
     feature_cols = get_lgb_feature_cols()
     scores = []
+    meta_scores = []
     for _, row in signals.iterrows():
         code = row["code"]
         hist = stocks_df[stocks_df["code"] == code].sort_values("date").copy()
         if len(hist) < 80:
             scores.append(0)
+            meta_scores.append(None)
             continue
         try:
             feat = build_lgb_features(hist)
             last = feat.iloc[-1:][feature_cols].fillna(0)
             proba = model.predict(last)[0]
             scores.append(round(proba, 4))
+            try:
+                _mm = getattr(_lgb_rerank, "_meta_model", None)
+                if _mm is None:
+                    from lgb_model import LightGBMModel as _MetaModel
+                    _mm = _MetaModel()
+                    _mm_path = os.path.join(_SCRIPT_DIR, "models/lgb_meta_triple.txt")
+                    if os.path.exists(_mm_path):
+                        _mm.load(_mm_path)
+                    _lgb_rerank._meta_model = _mm
+                if _mm is not None and hasattr(_mm, "predict"):
+                    meta_p = _mm.predict(last)[0]
+                    meta_scores.append(round(meta_p, 4))
+                else:
+                    meta_scores.append(None)
+            except Exception:
+                meta_scores.append(None)
         except Exception as e:
             logging.debug("LGB 评分异常 %s: %s", code, e)
             scores.append(0)
+            meta_scores.append(None)
     signals = signals.copy()
     signals["lgb_score"] = scores
+    signals["meta_score"] = meta_scores
+    try:
+        _save_signal_scores(signals)
+    except Exception:
+        pass
     return signals.sort_values("lgb_score", ascending=False)
+
+
+def _save_signal_scores(signals):
+    if signals.empty:
+        return
+    conn = _get_conn()
+    conn.execute("""CREATE TABLE IF NOT EXISTS paper_signals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        create_date TEXT,
+        code TEXT,
+        name TEXT,
+        score REAL,
+        meta_score REAL,
+        price REAL,
+        industry TEXT
+    )""")
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn.execute("DELETE FROM paper_signals WHERE create_date < date('now', '-7 day')")
+    rows = []
+    for _, r in signals.head(50).iterrows():
+        rows.append((
+            today, r.get("code",""), r.get("name",""),
+            float(r.get("lgb_score", 0)), float(r.get("meta_score", 0) or 0),
+            float(r.get("close", 0)), r.get("industry", "")
+        ))
+    conn.executemany(
+        "INSERT INTO paper_signals (create_date, code, name, score, meta_score, price, industry) VALUES (?,?,?,?,?,?,?)",
+        rows
+    )
+    conn.commit()
+    conn.close()
+    meta_count = sum(1 for m in signals["meta_score"] if m is not None and m > 0.1)
+    logging.info("信号评分已保存: %d 条, meta>0.1: %d 条", len(rows), meta_count)
 
 
 def get_hot_industries(stocks_df):

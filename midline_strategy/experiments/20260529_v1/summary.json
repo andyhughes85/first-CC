@@ -1,0 +1,21 @@
+{
+  "start_date": "2020-01-01",
+  "end_date": "2025-12-31",
+  "initial_capital": 1000000,
+  "n_trades": 253,
+  "total_return": 0.3802,
+  "annual_return": 0.0552,
+  "annual_vol": 0.0646,
+  "max_drawdown": -0.079,
+  "sharpe": 0.54,
+  "final_value": 1379248.89,
+  "win_rate": 0.4783,
+  "avg_win": 0.0993,
+  "avg_loss": -0.0541,
+  "green_light": false,
+  "benchmark_name": "沪深300",
+  "benchmark_return": 0.115,
+  "benchmark_annual": 0.0183,
+  "excess_return": 0.2652,
+  "excess_annual": 0.0369
+}

@@ -104,7 +104,7 @@ class Backtest:
         stocks = stocks.sort_values(["code", "date"]).reset_index(drop=True)
 
         # 数据门槛：剔除交易日不足1000天的股票
-        min_days = 1000
+        min_days = 60
         code_counts = stocks["code"].value_counts()
         valid_codes = code_counts[code_counts >= min_days].index
         before = stocks["code"].nunique()
@@ -280,10 +280,11 @@ class Backtest:
         mask_trend = (
             (df["ma5"] > df["ma10"])
             & (df["ma10"] > df["ma20"])
-            & (df["close"] > df["ma20"])
+            & (df["ma20"] > df["ma60"])
+            & (df["close"] > df["ma10"])
         )
         mask_dev = df["deviation"] < MAX_DEVIATION
-        mask_yang = df["close"] > df["open"]
+        mask_yang = (df["close"] > df["open"]) & ((df["close"] - df["open"]) / df["open"] > 0.005)
         mask_amplitude = df["amplitude_5d"] >= AMPLITUDE_5D_MIN
 
         # 基础信号不含量比、底背驰、蔡森——三者都在 _buy_check 中根据市场状态动态决定
@@ -731,6 +732,24 @@ class Backtest:
             and abs(summary.get("avg_win", 0) / summary.get("avg_loss", 1)) > 1.9,
             summary.get("max_drawdown", 0) > -0.25,
         ])
+        # 计算沪深300基准
+        summary["benchmark_name"] = "沪深300"
+        try:
+            conn = sqlite3.connect(os.path.join(_SCRIPT_DIR, "trading_data.db"))
+            bench = pd.read_sql("SELECT date, close FROM index_daily ORDER BY date", conn)
+            conn.close()
+            bench["date"] = pd.to_datetime(bench["date"].str.split(" ").str[0])
+            bm = bench[(bench["date"] >= self.start_date) & (bench["date"] <= self.end_date)]
+            if len(bm) > 1:
+                bm_ret = bm["close"].iloc[-1] / bm["close"].iloc[0] - 1
+                bm_ann = (1 + bm_ret) ** (1 / max((self.end_date - self.start_date).days / 365.25, 0.01)) - 1
+                summary["benchmark_return"] = round(bm_ret, 4)
+                summary["benchmark_annual"] = round(bm_ann, 4)
+                summary["excess_return"] = round(summary["total_return"] - bm_ret, 4)
+                summary["excess_annual"] = round(summary["annual_return"] - bm_ann, 4)
+        except Exception as e:
+            log.warning("基准计算失败: %s", e)
+
         summary["green_light"] = green
 
         with open(os.path.join(_SCRIPT_DIR, "backtest_summary.json"), "w", encoding="utf-8") as f:

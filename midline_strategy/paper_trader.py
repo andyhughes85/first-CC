@@ -489,11 +489,36 @@ class PaperTrader:
         conn.close()
 
     def get_positions(self):
+        """获取持仓（含止损检查 + 实时价格刷新）"""
         self.refresh_spot_prices()
+        self.emergency_exit_check()
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql("SELECT * FROM paper_positions", conn)
         conn.close()
         return df
+
+    def emergency_exit_check(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            positions = conn.execute(
+                "SELECT code, name, shares, entry_price, current_price, entry_date FROM paper_positions"
+            ).fetchall()
+            conn.close()
+            for code, name, shares, entry_p, curr_p, entry_date_str in positions:
+                if not curr_p or curr_p <= 0:
+                    continue
+                pnl = curr_p / entry_p - 1
+                if pnl <= -0.07:
+                    from datetime import datetime
+                    import pandas as pd
+                    import logging
+                    today = datetime.now()
+                    hold = (today - pd.Timestamp(entry_date_str)).days
+                    logging.warning("紧急止损触发: %s(%s) 盈亏%.2f%%", name, code, pnl*100)
+                    self.close_position(code, curr_p, "止损", today)
+        except Exception as e:
+            import logging
+            logging.error("紧急止损检查异常: %s", e)
 
     def get_trades(self):
         conn = sqlite3.connect(self.db_path)

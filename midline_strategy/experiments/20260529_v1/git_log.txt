@@ -1,0 +1,5 @@
+ee433c8 feat: 虚拟盘止损止盈主动推送 Telegram+Server酱
+29e462e fix: 交易日历缓存失败时不再重复重试，降级到内置表
+0251eea fix: 盘中预警参数调整 + 缓存空自动补数据
+726aea4 chore: deploy.sh 增加模型完整性检查 + 修复脚本目录路径
+bf8c9b2 refactor: 辅助脚本移入 scripts/ 目录
