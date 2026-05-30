@@ -1,4 +1,4 @@
-# ================== 策略参数 ==================
+﻿# ================== 策略参数 ==================
 import os
 
 MARKET_MA_SHORT = 20
@@ -60,7 +60,7 @@ PUSH_TYPE = "telegram"  # "telegram" | "serverchan"
 TELEGRAM_TOKEN = "8991675281:AAFbGF0xvlpzs9RZafY8U6k8cmwEoYKe02s"
 TELEGRAM_CHAT_ID = "-5277218158"
 SERVERCHAN_KEY = "SCT353028TEFdxCoH9ZCauuBaDj1R7DBM8"
-TELEGRAM_PROXY = "socks5h://127.0.0.1:1080"  # Telegram代理（Vultr SOCKS5隧道）
+TELEGRAM_PROXY = "socks5h://45.32.27.252:1080"  # Telegram代理（Vultr SOCKS5隧道）
 
 # ================== 定时 ==================
 SCHEDULE_TIME = "15:35"
