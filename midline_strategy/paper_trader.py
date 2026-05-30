@@ -87,6 +87,9 @@ class PaperTrader:
         """每日处理：更新市价→检查出场→执行入场→记录权益"""
         today = pd.Timestamp(date)
 
+        # 重置当天已卖出记录（防止同一天重复买入同一股票）
+        self._today_sold = set()
+
         # 1. 更新持仓市价
         self._update_prices(stocks_df)
 
@@ -190,6 +193,9 @@ class PaperTrader:
         )
         conn.commit()
         conn.close()
+
+        # 记录当天已卖出（防止同一天重复买入）
+        self._today_sold.add(code)
 
         # 推送出场通知
         emoji = "🛑" if pnl <= 0 else "✅"
@@ -329,6 +335,8 @@ class PaperTrader:
         for _, row in signals.iterrows():
             code = row["code"]
             if code in existing:
+                continue
+            if code in self._today_sold:
                 continue
             if self._position_count() >= 10:  # 最大持仓数
                 break
