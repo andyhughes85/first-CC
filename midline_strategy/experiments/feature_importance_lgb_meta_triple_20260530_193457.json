@@ -1,0 +1,112 @@
+{
+  "model": "models/lgb_meta_triple.txt",
+  "timestamp": "20260530_193457",
+  "total_features": 26,
+  "features": [
+    {
+      "name": "atr_ratio",
+      "importance": 17125.39
+    },
+    {
+      "name": "volatility_20d",
+      "importance": 2298.45
+    },
+    {
+      "name": "day_range",
+      "importance": 1550.26
+    },
+    {
+      "name": "boll_width",
+      "importance": 1236.66
+    },
+    {
+      "name": "volume_ratio",
+      "importance": 1174.51
+    },
+    {
+      "name": "macd_dea",
+      "importance": 1143.07
+    },
+    {
+      "name": "ret_1d",
+      "importance": 961.63
+    },
+    {
+      "name": "volatility_5d",
+      "importance": 854.75
+    },
+    {
+      "name": "ret_20d",
+      "importance": 747.38
+    },
+    {
+      "name": "macd_bar",
+      "importance": 747.32
+    },
+    {
+      "name": "ret_10d",
+      "importance": 730.51
+    },
+    {
+      "name": "macd_diff",
+      "importance": 641.36
+    },
+    {
+      "name": "volume_pct",
+      "importance": 563.4
+    },
+    {
+      "name": "volatility_10d",
+      "importance": 507.21
+    },
+    {
+      "name": "rsi",
+      "importance": 463.0
+    },
+    {
+      "name": "close_position",
+      "importance": 281.06
+    },
+    {
+      "name": "ret_3d",
+      "importance": 273.21
+    },
+    {
+      "name": "sup_res_dist",
+      "importance": 257.62
+    },
+    {
+      "name": "ma10_dist",
+      "importance": 244.25
+    },
+    {
+      "name": "ma5_dist",
+      "importance": 243.75
+    },
+    {
+      "name": "ret_5d",
+      "importance": 187.32
+    },
+    {
+      "name": "boll_position",
+      "importance": 165.69
+    },
+    {
+      "name": "ma20_dist",
+      "importance": 101.94
+    },
+    {
+      "name": "momentum",
+      "importance": 66.75
+    },
+    {
+      "name": "macd_cross",
+      "importance": 0.0
+    },
+    {
+      "name": "ma5_10_cross",
+      "importance": 0.0
+    }
+  ],
+  "remove_count": 2
+}

@@ -1,0 +1,112 @@
+{
+  "model": "models/lgb_midline.txt",
+  "timestamp": "20260530_193648",
+  "total_features": 26,
+  "features": [
+    {
+      "name": "atr_ratio",
+      "importance": 291530.95
+    },
+    {
+      "name": "day_range",
+      "importance": 114068.64
+    },
+    {
+      "name": "ma20_dist",
+      "importance": 77398.35
+    },
+    {
+      "name": "boll_width",
+      "importance": 77295.22
+    },
+    {
+      "name": "macd_bar",
+      "importance": 65615.23
+    },
+    {
+      "name": "sup_res_dist",
+      "importance": 54168.07
+    },
+    {
+      "name": "macd_dea",
+      "importance": 52942.02
+    },
+    {
+      "name": "volatility_10d",
+      "importance": 51261.37
+    },
+    {
+      "name": "ret_20d",
+      "importance": 44565.33
+    },
+    {
+      "name": "ret_10d",
+      "importance": 38396.33
+    },
+    {
+      "name": "ma10_dist",
+      "importance": 37207.18
+    },
+    {
+      "name": "volatility_20d",
+      "importance": 36769.31
+    },
+    {
+      "name": "macd_diff",
+      "importance": 26441.46
+    },
+    {
+      "name": "ret_5d",
+      "importance": 23876.42
+    },
+    {
+      "name": "volatility_5d",
+      "importance": 19729.48
+    },
+    {
+      "name": "ma5_dist",
+      "importance": 17478.36
+    },
+    {
+      "name": "volume_pct",
+      "importance": 15984.81
+    },
+    {
+      "name": "volume_ratio",
+      "importance": 14331.33
+    },
+    {
+      "name": "rsi",
+      "importance": 14280.79
+    },
+    {
+      "name": "ret_1d",
+      "importance": 12794.88
+    },
+    {
+      "name": "boll_position",
+      "importance": 10028.66
+    },
+    {
+      "name": "close_position",
+      "importance": 8580.92
+    },
+    {
+      "name": "ret_3d",
+      "importance": 6360.23
+    },
+    {
+      "name": "momentum",
+      "importance": 6120.34
+    },
+    {
+      "name": "ma5_10_cross",
+      "importance": 153.2
+    },
+    {
+      "name": "macd_cross",
+      "importance": 0.0
+    }
+  ],
+  "remove_count": 1
+}
