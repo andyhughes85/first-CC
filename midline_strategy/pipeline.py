@@ -10,7 +10,7 @@ from market_state import judge_market_state, add_index_indicators
 from signal_engine import generate_signals
 from push_service import send_daily_report, send_weekly_report
 from config import DB_PATH
-from lgb_features import build_lgb_features, get_lgb_feature_cols
+from feature_pipeline import build_all_features, get_lgb_feature_cols
 from lgb_model import LightGBMModel
 from hmm_market import train_hmm_model, load_hmm_model, save_hmm_model, predict_market_state
 
@@ -114,7 +114,7 @@ def _lgb_rerank(signals, stocks_df):
             meta_scores.append(None)
             continue
         try:
-            feat = build_lgb_features(hist)
+            feat = build_all_features(hist)
             last = feat.iloc[-1:][feature_cols].fillna(0)
             proba = model.predict(last)[0]
             scores.append(round(proba, 4))
@@ -154,7 +154,7 @@ def _lgb_rerank(signals, stocks_df):
         _save_signal_scores(signals)
     except Exception:
         pass
-    return signals.sort_values("lgb_score", ascending=False)
+    return signals.sort_values("final_score", ascending=False)
 
 
 def _save_signal_scores(signals):
