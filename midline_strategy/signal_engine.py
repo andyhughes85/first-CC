@@ -108,6 +108,13 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
         & (pool["ma20"] > pool["ma60"])
         & (pool["close"] > pool["ma10"])
     )
+    # 趋势评分（从硬过滤改为评分项，不做淘汰）
+    trend_score = (
+        (pool["ma5"] > pool["ma10"]).astype(int)
+        + (pool["ma10"] > pool["ma20"]).astype(int)
+        + (pool["ma20"] > pool["ma60"]).astype(int)
+        + (pool["close"] > pool["ma10"]).astype(int)
+    )  # 0~4分
     mask_dev = deviation < MAX_DEVIATION
     mask_yang = pool["close"] > pool["open"]
     mask_div = pool["divergence_bull"]
@@ -116,25 +123,26 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
 
     if market_state == "bull":
         mask_vol = (vol_ratio >= VOL_RATIO_MIN_BULL) & (vol_ratio <= VOL_RATIO_MAX)
-        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_amplitude
+        final_mask = mask_vol & mask_dev & mask_yang & mask_amplitude
     elif market_state == "bear":
         mask_vol_bear = vol_ratio > 2.5
-        final_mask = mask_trend & mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen & mask_amplitude
+        final_mask = mask_vol_bear & mask_dev & mask_yang & mask_div & mask_caisen & mask_amplitude
     else:
         mask_vol = (vol_ratio >= VOL_RATIO_MIN_OSC) & (vol_ratio <= VOL_RATIO_MAX)
-        final_mask = mask_trend & mask_vol & mask_dev & mask_yang & mask_div & mask_amplitude
+        final_mask = mask_vol & mask_dev & mask_yang & mask_div & mask_amplitude
 
     signals = pool[final_mask].copy()
     if signals.empty:
         return pd.DataFrame(), {
             "base_pool": base_pool,
-            "after_trend": len(pool[mask_trend]["code"].unique()),
+            "after_trend_mean": float(trend_score.mean()) if len(trend_score) > 0 else 0,
             "after_all": 0,
         }
 
     signals["volume_ratio"] = signals["volume"] / signals["vol_ma20"]
     signals["deviation"] = (signals["close"] - signals["ma20"]) / signals["ma20"]
     signals["reason"] = "反转信号"
+    signals["trend_score"] = trend_score.values if hasattr(trend_score, "values") else trend_score
     signals["score"] = _calc_score(signals)
 
     industry_filter = 0
@@ -147,7 +155,7 @@ def generate_signals(df, hot_industries=None, market_state="oscillation"):
 
     filter_stats = {
         "base_pool": base_pool,
-        "after_trend": len(pool[mask_trend]["code"].unique()),
+        "after_trend_mean": float(trend_score.mean()) if len(trend_score) > 0 else 0,
         "after_all": len(signals),
         "industry_filter": industry_filter,
         "max_score": float(signals["score"].max()) if not signals.empty else 0,
