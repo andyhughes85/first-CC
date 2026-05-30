@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION, \
+from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION, BENCHMARK_CODE, \
     KAMA_STOCK_SHORT, KAMA_STOCK_MID, KAMA_STOCK_LONG, KAMA_STOCK_MAIN, VOL_RATIO_MIN_BULL, VOL_RATIO_MIN_OSC, AMPLITUDE_5D_MIN
 from data_fetcher import load_cached
 from market_state import judge_market_state, add_index_indicators
@@ -733,7 +733,7 @@ class Backtest:
             summary.get("max_drawdown", 0) > -0.25,
         ])
         # 计算沪深300基准
-        summary["benchmark_name"] = "沪深300"
+        summary["benchmark_name"] = BENCHMARK_CODE
         try:
             conn = sqlite3.connect(os.path.join(_SCRIPT_DIR, "trading_data.db"))
             bench = pd.read_sql("SELECT date, close FROM index_daily ORDER BY date", conn)

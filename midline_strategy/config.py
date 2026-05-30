@@ -49,7 +49,8 @@ TOP_INDUSTRIES_N = 5
 INDUSTRY_MOMENTUM_DAYS = 20
 
 # ================== 数据 ==================
-INDEX_CODE = "000300"          # 沪深300
+INDEX_CODE = "000300"          # 沪深300（市场状态判断用）
+BENCHMARK_CODE = "000300"      # 基准指数（回测对比用，可选000300/000905等）
 SINA_INDEX_SYMBOL = "sh000300"
 START_DATE = "20200101"
 _CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
