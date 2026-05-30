@@ -148,3 +148,20 @@ A 股全市场 (5000+只, 剔除ST)
 
 git commit fcf56e5
 
+## 2026-05-30 上线前第二次修复
+
+### 发现并修复
+
+| # | 问题 | 影响 | 修复 |
+|:-:|:----|:----|:----:|
+| 1 | paper_signals 表被 paper_trader/pipeline 不同结构定义 (8 vs 10列) | meta_score 写入失败, silent catch 吞掉 | 统一为 paper_trader 管理, pipeline 内联 INSERT OR IGNORE + UPDATE |
+| 2 | except: pass 吞掉数据丢失异常 | 无日志追溯 | 改为 logging.warning |
+| 3 | 数据库缺少 lgb_score/meta_score 列 | 无法复盘元标注效果 | ALTER TABLE ADD COLUMN (已执行) |
+
+### 当前数据库结构验证
+
+`
+paper_signals: id, date, code, name, close, volume_ratio, deviation, 
+               score, lgb_score, meta_score, industry, executed
+`
+
