@@ -96,3 +96,38 @@ description: 工作进度记录
 | P4 | 模型上线替换 |
 | P5 | 清理三柱法观察通道代码/过期文件 |
 
+## 2026-05-30 P3~P4 推进记录
+
+| 优先级 | 任务 | 文件 | 状态 |
+|:-----:|------|:----:|:----:|
+| P3 | train_meta 三柱法 + Purged K-Fold | lgb_trainer.py | ✅ |
+| P4 | pipeline.py 上线软集成 (main*0.7 + main*meta*0.3) | pipeline.py | ✅ |
+
+### 元标注训练结果
+
+| 指标 | 值 |
+|:----|:----:|
+| CV AUC | 0.579 ± 0.030 |
+| 正样本率 | 25.17% |
+| 有效样本 | 105,428 条 |
+| 主要特征 | atr_ratio (12313), day_range (1671), volatility_20d (1649) |
+
+### 当前系统流水线
+
+`
+A 股全市场 (5000+只, 剔除ST)
+  -> 均线多头排列 (MA5>MA10>MA20>MA60)
+  -> 放量筛选 (量比 1.5~4.0)
+  -> 偏离筛选 (距20日线 < 8%)
+  -> lgb_midline 评分 (24个量价特征, AUC 0.611)
+  -> lgb_meta 元标注软集成 (final = main*0.7 + main*meta*0.3)
+  -> Telegram 推送
+`
+
+### 待推进 (P5)
+
+- 清理 lgb_meta_triple 模型/代码
+- 清理三柱法观察通道代码
+- 清理 lgb_features.py 旧接口（统一用 feature_pipeline.py）
+- 收集2周线上数据后评估模型效果
+
