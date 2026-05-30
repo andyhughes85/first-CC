@@ -258,6 +258,9 @@ with tab0:
     with cols[4]: st.metric("今日信号", len(signals_df) if not signals_df.empty else 0)
 
     # 权益曲线
+    bug_y = None
+    if not equity.empty and len(equity[equity["date"]=="2026-05-30"])>0:
+        bug_y = equity[equity["date"]=="2026-05-30"]["total_equity"].iloc[0]
     if not equity.empty:
         st.subheader("权益曲线")
         fig = go.Figure()
@@ -270,6 +273,12 @@ with tab0:
             for ms in equity["market_state"].unique():
                 m = equity["market_state"]==ms
                 if m.any(): s=equity[m]; fig.add_vrect(x0=s["date"].iloc[0],x1=s["date"].iloc[-1],fillcolor=clrs.get(ms,"rgba(136,136,136,0.15)"),layer="below",line_width=0,opacity=0.5)
+        # bug 标注: 2025-05-30 同一天重复买入 bug, 修复于 36f16f3
+        if bug_y is not None:
+            fig.add_annotation(x="2026-05-30", y=bug_y,
+                text="bug 5/30", showarrow=True, arrowhead=2, arrowsize=1.5, arrowcolor="#FF5722",
+                font=dict(color="#FF5722", size=14),
+                ax=80, ay=-60, xanchor="left")
         fig.update_layout(height=350,margin=dict(l=0,r=0,t=0,b=0),plot_bgcolor="#0E1117",paper_bgcolor="#0E1117",
             font=dict(color="#FAFAFA"),hovermode="x unified",xaxis=dict(showgrid=False),yaxis=dict(showgrid=True,gridcolor="#2E3138"),
             legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
