@@ -99,7 +99,7 @@ def get_last_run_info():
 
 
 def _lgb_rerank(signals, stocks_df):
-    """用 LightGBM 模型对信号重排序（含元标注观察通道）"""
+    """用 LightGBM 模型对信号重排序（主模型+元标注软集成）"""
     model = _load_lgb_model()
     if model is None or signals.empty:
         return signals
@@ -123,7 +123,7 @@ def _lgb_rerank(signals, stocks_df):
                 if _mm is None:
                     from lgb_model import LightGBMModel as _MetaModel
                     _mm = _MetaModel()
-                    _mm_path = os.path.join(_SCRIPT_DIR, "models/lgb_meta_triple.txt")
+                    _mm_path = os.path.join(_SCRIPT_DIR, "models/lgb_meta.txt")
                     if os.path.exists(_mm_path):
                         _mm.load(_mm_path)
                     _lgb_rerank._meta_model = _mm
@@ -141,6 +141,15 @@ def _lgb_rerank(signals, stocks_df):
     signals = signals.copy()
     signals["lgb_score"] = scores
     signals["meta_score"] = meta_scores
+    # 软集成: final_score = main * 0.7 + main * meta * 0.3
+    def _soft(row):
+        m = row["lgb_score"]
+        meta = row["meta_score"]
+        if meta is not None and meta > 0:
+            return m * 0.7 + m * meta * 0.3
+        return m * 0.7
+    signals["final_score"] = signals.apply(_soft, axis=1)
+    signals = signals.sort_values("final_score", ascending=False)
     try:
         _save_signal_scores(signals)
     except Exception:
@@ -178,7 +187,7 @@ def _save_signal_scores(signals):
     conn.commit()
     conn.close()
     meta_count = sum(1 for m in signals["meta_score"] if m is not None and m > 0.1)
-    logging.info("信号评分已保存: %d 条, meta>0.1: %d 条", len(rows), meta_count)
+    logging.info("信号评分已保存: %d 条, meta>0.1: %d 条 (软集成: main*0.7+main*meta*0.3)", len(rows), meta_count)
 
 
 def get_hot_industries(stocks_df):
