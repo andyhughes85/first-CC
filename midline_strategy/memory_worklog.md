@@ -131,3 +131,20 @@ A 股全市场 (5000+只, 剔除ST)
 - 清理 lgb_features.py 旧接口（统一用 feature_pipeline.py）
 - 收集2周线上数据后评估模型效果
 
+## 2026-05-30 上线前审核修复
+
+### 发现并修复的问题
+
+| # | 问题 | 文件 | 影响 | 修复 |
+|:-:|:----|:----:|:----|:----|
+| 1 | 返回按 lgb_score 排序，覆盖软集成 final_score | pipeline.py:157 | 元标注未生效 | ✅ 改回 final_score |
+| 2 | 线上评分沿用 lgb_features.build_lgb_features (atr计算不同) | pipeline.py:13,117 | 训练/评分特征不一致 | ✅ 改为 feature_pipeline.build_all_features |
+
+### 验证
+
+用 10 只股票模拟评分: 全部正确, final_score 降序排列, 元标注影响可见
+
+### 版本
+
+git commit fcf56e5
+
