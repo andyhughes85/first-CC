@@ -85,6 +85,8 @@ def calc_macd(df):
     g["dif"] = g["ema12"] - g["ema26"]
     g["dea"] = g["dif"].ewm(span=9).mean()
     g["macd_bar"] = 2 * (g["dif"] - g["dea"])
+    g["macd_diff"] = g["dif"]
+    g["macd_dea"] = g["dea"]
     g["divergence_bull"] = (g["macd_bar"].rolling(3).mean() > g["macd_bar"].shift(3).rolling(3).mean())
     return g
 
@@ -197,10 +199,10 @@ def get_lgb_feature_cols():
         "ret_1d","ret_3d","ret_5d","ret_10d","ret_20d",
         "volatility_5d","volatility_10d","volatility_20d",
         "volume_ratio","volume_pct","rsi",
-        "macd_diff","macd_dea","macd_bar","macd_cross",
+        "macd_diff","macd_dea","macd_bar",
         "boll_position","boll_width",
         "ma5_dist","ma10_dist","ma20_dist",
-        "ma5_10_cross","atr_ratio",
+        "atr_ratio",
         "day_range","close_position","momentum","sup_res_dist",
     ]
 

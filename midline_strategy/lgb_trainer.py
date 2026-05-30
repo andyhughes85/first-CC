@@ -1,4 +1,4 @@
-"""LightGBM 训练脚本 — 支持主模型和元标注两种模式"""
+﻿"""LightGBM 训练脚本 — 支持主模型和元标注两种模式"""
 
 import sys
 import os
@@ -10,7 +10,8 @@ from datetime import datetime
 
 from data_fetcher import load_cached
 from config import STOCK_MA5, STOCK_MA10, STOCK_MA20, STOCK_MA60, VOL_RATIO_MIN, VOL_RATIO_MAX, MAX_DEVIATION
-from lgb_features import build_lgb_features, create_label, get_lgb_feature_cols, add_meta_label, triple_barrier_meta_label
+from feature_pipeline import build_all_features, create_label, get_lgb_feature_cols
+from lgb_features import add_meta_label, triple_barrier_meta_label
 from lgb_model import LightGBMModel, FORWARD_DAYS, BUY_THRESHOLD
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -166,32 +167,15 @@ def train_primary():
 
 
 def build_training_dataset(stocks, max_stocks=None):
-    """对每只股票构建特征和标签"""
+    """向量化：对所有股票同时构建特征和标签"""
     feature_cols = get_lgb_feature_cols()
-    all_rows = []
-
-    codes = stocks["code"].unique()
-    if max_stocks:
-        codes = codes[:max_stocks]
-
-    for i, code in enumerate(codes):
-        if (i + 1) % 200 == 0:
-            print(f"  特征构建: {i+1}/{len(codes)}")
-        hist = stocks[stocks["code"] == code].sort_values("date").copy()
-        if len(hist) < 80:
-            continue
-        try:
-            df = build_lgb_features(hist)
-            df = create_label(df, FORWARD_DAYS, BUY_THRESHOLD)
-            df["code"] = code
-            all_rows.append(df)
-        except Exception as e:
-            print(f"  跳过 {code}: {e}")
-
-    if not all_rows:
-        raise ValueError("无可用训练数据")
-    train_df = pd.concat(all_rows, ignore_index=True)
-    return train_df.dropna(subset=feature_cols + ["label"])
+    print(f"  向量化特征构建: {stocks['code'].nunique()} 只股票, {len(stocks)} 行")
+    df = build_all_features(stocks)
+    print(f"  特征构建完成: {len(df)} 行")
+    df = create_label(df, FORWARD_DAYS, BUY_THRESHOLD)
+    df = df.dropna(subset=feature_cols + ["label"])
+    print(f"  去空后: {len(df)} 行, {df['code'].nunique()} 只")
+    return df
 
 
 def train_meta():
@@ -333,3 +317,7 @@ if __name__ == "__main__":
         train_meta()
     else:
         train_primary()
+
+
+
+
