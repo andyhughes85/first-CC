@@ -150,44 +150,12 @@ def _lgb_rerank(signals, stocks_df):
         return m * 0.7
     signals["final_score"] = signals.apply(_soft, axis=1)
     signals = signals.sort_values("final_score", ascending=False)
+    # 保存评分到 paper_signals (更新 lgb_score/meta_score)
     try:
-        _save_signal_scores(signals)
-    except Exception:
-        pass
+        _inline_save_scores(signals)
+    except Exception as e:
+        logging.warning("保存信号评分失败: %s", e)
     return signals.sort_values("final_score", ascending=False)
-
-
-def _save_signal_scores(signals):
-    if signals.empty:
-        return
-    conn = _get_conn()
-    conn.execute("""CREATE TABLE IF NOT EXISTS paper_signals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        create_date TEXT,
-        code TEXT,
-        name TEXT,
-        score REAL,
-        meta_score REAL,
-        price REAL,
-        industry TEXT
-    )""")
-    today = datetime.now().strftime("%Y-%m-%d")
-    conn.execute("DELETE FROM paper_signals WHERE create_date < date('now', '-7 day')")
-    rows = []
-    for _, r in signals.head(50).iterrows():
-        rows.append((
-            today, r.get("code",""), r.get("name",""),
-            float(r.get("lgb_score", 0)), float(r.get("meta_score", 0) or 0),
-            float(r.get("close", 0)), r.get("industry", "")
-        ))
-    conn.executemany(
-        "INSERT INTO paper_signals (create_date, code, name, score, meta_score, price, industry) VALUES (?,?,?,?,?,?,?)",
-        rows
-    )
-    conn.commit()
-    conn.close()
-    meta_count = sum(1 for m in signals["meta_score"] if m is not None and m > 0.1)
-    logging.info("信号评分已保存: %d 条, meta>0.1: %d 条 (软集成: main*0.7+main*meta*0.3)", len(rows), meta_count)
 
 
 def get_hot_industries(stocks_df):
@@ -353,6 +321,38 @@ def daily_job(status=None):
         )
     except Exception as e:
         logging.error("任务失败: %s", e, exc_info=True)
+
+
+def _inline_save_scores(signals):
+    """保存 LGB 评分到 paper_signals 表（INSERT OR UPDATE）"""
+    if signals is None or signals.empty:
+        return
+    try:
+        conn = _get_conn()
+        today = datetime.now().strftime("%Y-%m-%d")
+        for _, r in signals.head(50).iterrows():
+            lgb_s = float(r.get("lgb_score", 0))
+            meta_s = float(r.get("meta_score", 0) or 0)
+            code = r.get("code", "")
+            name = r.get("name", "")
+            close = float(r.get("close", r.get("price", 0)))
+            industry = r.get("industry", "")
+            score = float(r.get("score", 0))
+            conn.execute(
+                "INSERT OR IGNORE INTO paper_signals (date, code, name, close, score, lgb_score, meta_score, industry) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (today, code, name, close, score, lgb_s, meta_s, industry)
+            )
+            conn.execute(
+                "UPDATE paper_signals SET lgb_score=?, meta_score=? WHERE date=? AND code=?",
+                (lgb_s, meta_s, today, code)
+            )
+        conn.commit()
+        conn.close()
+        meta_count = sum(1 for m in signals["meta_score"] if m is not None and m > 0.1)
+        logging.info("信号评分已保存: %d 条, meta>0.1: %d 条 (软集成: main*0.7+main*meta*0.3)", len(signals), meta_count)
+    except Exception as e:
+        logging.warning("保存信号评分异常: %s", e)
 
 
 def weekly_job():
